@@ -60,7 +60,7 @@ tbody tr:hover { background: var(--chip); }
 /* status pills */
 .pill { display: inline-block; padding: 3px 9px; border-radius: 99px; font-size: .72rem; font-weight: 600; }
 .pill.cin7 { background: #ece6f5; color: #5b3f8c; }
-.pill.recv { background: #e4e0cf; color: #6b5a1a; }
+.pill.in-lab { background: #e4e0cf; color: #6b5a1a; }
 .pill.prog { background: #dce6f2; color: #1d4f7a; }
 .pill.ready { background: #e2ecdf; color: var(--accent); }
 .pill.done, .pill.waived { background: var(--chip); color: var(--muted); }
