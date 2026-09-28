@@ -117,9 +117,16 @@ export async function loadCategories() {
 // Ask the server to re-check everything with Cin7 right now: orders, then the full product/category list.
 // Runs as the signed-in user (no secret needed in the browser).
 async function invokeEdgeFunction(name, body) {
+  const { data: { session }, error: sessionError } = await db.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (!session?.access_token) throw new Error("No signed-in session is available for sync.");
+
   const { data, error } = await db.functions.invoke(name, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`,
+    },
     body,
   });
   if (error) {
