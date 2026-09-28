@@ -27,9 +27,6 @@ function setSyncState(syncing) {
 
 function formatSyncError(err) {
   const message = err?.message || String(err || "Unknown sync error");
-  if (/non-2xx|not found|404|Edge Function|could not find/i.test(message)) {
-    return "Sync failed: the 'cin7-sync' edge function is missing, not deployed, or not accessible to the signed-in user.";
-  }
   return "Sync failed: " + message;
 }
 

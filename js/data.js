@@ -122,7 +122,18 @@ async function invokeEdgeFunction(name, body) {
     headers: { "Content-Type": "application/json" },
     body,
   });
-  if (error) throw error;
+  if (error) {
+    const response = error.context;
+    if (response && typeof response.clone === "function") {
+      let details = "";
+      try {
+        details = (await response.clone().text()).trim();
+      } catch {}
+      const status = response.status ? `HTTP ${response.status}` : "request failed";
+      throw new Error(`${name} failed (${status})${details ? `: ${details.slice(0, 500)}` : ""}`);
+    }
+    throw error;
+  }
   return data;
 }
 
