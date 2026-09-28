@@ -24,6 +24,9 @@ button.ghost { background: transparent; border: 1px solid var(--line); }
 button.danger { background: transparent; border: 1px solid var(--line); color: var(--danger); }
 .muted { color: var(--muted); font-size: .85rem; }
 button.small { padding: 4px 10px; font-size: .78rem; align-self: flex-start; }
+.money { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); }
+.money span { padding-left: 9px; color: var(--muted); }
+.money input { border: 0; background: transparent; }
 input:disabled { opacity: .65; }
 
 /* toolbar */
