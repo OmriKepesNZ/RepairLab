@@ -8,9 +8,9 @@ export const today = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
 export const fmtDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "—");
 export const fmtDateTime = (iso) => new Date(iso).toLocaleString("en-NZ", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 
-export const STATUSES = ["Created in Cin7", "In Lab", "In Progress", "Ready for Pickup", "Completed"];
+export const STATUSES = ["Created in Cin7", "Received", "In Progress", "Ready for Pickup", "Completed"];
 export const PAYMENTS = ["Unpaid", "Paid", "Waived"];
-const STATUS_CLASS = { "Created in Cin7": "cin7", "In Lab": "recv", "In Progress": "prog", "Ready for Pickup": "ready", Completed: "done" };
+const STATUS_CLASS = { "Created in Cin7": "cin7", Received: "recv", "In Progress": "prog", "Ready for Pickup": "ready", Completed: "done" };
 const PAYMENT_CLASS = { Unpaid: "unpaid", Paid: "paid", Waived: "waived" };
 export const statusPill = (status) => `<span class="pill ${STATUS_CLASS[status] || ""}">${esc(status)}</span>`;
 export const paymentPill = (payment) => `<span class="pill ${PAYMENT_CLASS[payment] || ""}">${esc(payment)}</span>`;
@@ -18,7 +18,7 @@ export const paymentPill = (payment) => `<span class="pill ${PAYMENT_CLASS[payme
 // Names used when writing "what changed" into a repair's history.
 const LABELS = {
   invoiceNumber: "Invoice #", customerName: "Customer", orderCreated: "Order created", dateReceivedLab: "Received in lab",
-  dateOut: "Date out", item: "Class", qty: "Qty", category: "Category", description: "Description", status: "Status",
+  dateOut: "Date completed", item: "Class", qty: "Qty", category: "Category", description: "Description", status: "Status",
   paymentStatus: "Payment", repairTime: "Repair time", materialCost: "Material cost", productName: "Product",
 };
 const DATE_FIELDS = ["orderCreated", "dateReceivedLab", "dateOut"];
