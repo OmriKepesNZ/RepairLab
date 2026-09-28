@@ -1,7 +1,7 @@
 // Everything that talks to Supabase. The rest of the app only uses these functions.
-import { showBanner, today } from "./util.js";
+import { showBanner, today, STATUSES } from "./util.js";
 
-export const state = { repairs: [], me: { name: "Someone" }, view: "list" };
+export const state = { repairs: [], me: { name: "Someone" }, view: "board" };
 
 let db;
 let onChange = () => {};
@@ -77,10 +77,12 @@ export async function deleteRepair(id) {
   await loadRepairs();
 }
 
-// When a garment leaves "Created in Cin7" it has arrived, so stamp today's date as "received in lab".
+// Moving a repair into "Received" fills in today's date as "received in lab" (if not already set).
+// Moving it into "Ready for Pickup" fills in today's date as "date completed" (if not already set).
 export function withLabDate(repair, changes) {
-  const arrived = repair.status === "Created in Cin7" && (changes.status ?? repair.status) !== "Created in Cin7";
-  if (arrived && !repair.dateReceivedLab && !changes.dateReceivedLab) changes.dateReceivedLab = today();
+  const newStatus = changes.status ?? repair.status;
+  if (newStatus === STATUSES[1] && !repair.dateReceivedLab && !changes.dateReceivedLab) changes.dateReceivedLab = today();
+  if (newStatus === STATUSES[3] && !repair.dateOut && !changes.dateOut) changes.dateOut = today();
   return changes;
 }
 
@@ -110,4 +112,19 @@ export async function loadCategories() {
     if (!error) categoryCache = data.map((row) => row.category);
   }
   return categoryCache || [];
+}
+
+// Ask the server to re-check everything with Cin7 right now: orders, then the full product/category list.
+// Runs as the signed-in user (no secret needed in the browser).
+export async function forceSync() {
+  const { data, error } = await db.functions.invoke("cin7-sync", { body: { job: "all", force: true } });
+  if (error) throw error;
+  let products = data.products;
+  for (let guard = 0; products?.finished === false && guard < 8; guard++) {
+    const step = await db.functions.invoke("cin7-sync", { body: { job: "products" } });
+    if (step.error) throw step.error;
+    products = step.data;
+  }
+  await loadRepairs();
+  return { orders: data.orders, products };
 }
