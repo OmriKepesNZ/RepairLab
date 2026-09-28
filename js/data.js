@@ -116,15 +116,24 @@ export async function loadCategories() {
 
 // Ask the server to re-check everything with Cin7 right now: orders, then the full product/category list.
 // Runs as the signed-in user (no secret needed in the browser).
-export async function forceSync() {
-  const { data, error } = await db.functions.invoke("cin7-sync", { body: { job: "all", force: true } });
+async function invokeEdgeFunction(name, body) {
+  const { data, error } = await db.functions.invoke(name, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  });
   if (error) throw error;
-  let products = data.products;
+  return data;
+}
+
+export async function forceSync() {
+  const result = await invokeEdgeFunction("cin7-sync", { job: "all", force: true });
+  let products = result?.products;
   for (let guard = 0; products?.finished === false && guard < 8; guard++) {
-    const step = await db.functions.invoke("cin7-sync", { body: { job: "products" } });
-    if (step.error) throw step.error;
-    products = step.data;
+    const step = await invokeEdgeFunction("cin7-sync", { job: "products" });
+    if (step?.error) throw new Error(step.error.message || step.error);
+    products = step?.data ?? step;
   }
   await loadRepairs();
-  return { orders: data.orders, products };
+  return { orders: result?.orders, products };
 }

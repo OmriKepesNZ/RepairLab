@@ -34,6 +34,85 @@ const productBox = (r) => `
   <div class="product-row"><input id="f-product" autocomplete="off" placeholder="Type a name or SKU…" value="${esc(r.productName)}"><button type="button" class="ghost" id="f-product-clear">Clear</button></div>
   <div class="product-results" id="product-results"></div>`;
 
+const renderRepairModal = (r, isNew, fromCin7) => `
+  <div class="modal">
+    <h2><span>${isNew ? "New repair" : `${esc(r.invoiceNumber)} · ${esc(r.customerName)}`}</span>${isNew ? "" : statusPill(r.status)}</h2>
+    ${fromCin7 ? cin7Details(r) : manualDetails(r)}
+    <h3>Lab</h3>
+    <div class="grid">
+      ${field("Status", `<select id="f-status">${options(STATUSES, r.status)}</select>`) }
+      ${field("Payment", `<select id="f-payment">${options(PAYMENTS, r.paymentStatus)}</select>`) }
+      ${field("Product (search Cin7 products)", productBox(r))}
+      ${field("Category", `<input id="f-category" list="categories" autocomplete="off" placeholder="Search categories…" value="${esc(r.category)}"><datalist id="categories"></datalist>`) }
+      ${field("Received in lab", `<input id="f-lab" type="date" value="${r.dateReceivedLab || ""}">`) }
+      ${field("Date completed", `<input id="f-out" type="date" value="${r.dateOut || ""}">`) }
+      ${field("Repair time (min)", `<input id="f-time" type="number" min="0" value="${r.repairTime ?? ""}">`) }
+      ${field("Raw material cost", `<div class="money"><span>$</span><input id="f-cost" type="number" min="0" step="0.01" value="${r.materialCost ?? ""}"></div>`) }
+      ${field("Repair description", `<textarea id="f-description">${esc(r.description)}</textarea>${r.cin7Comments ? `<button type="button" class="ghost small" id="copy-cin7">Copy from Cin7</button>` : ""}`, true)}
+    </div>
+    <div style="margin-top:12px">${field("Comment", `<textarea id="f-comment" placeholder="Add a comment (posted when you save)…"></textarea>`, true)}</div>
+    <div class="actions">
+      <div>${isNew ? "" : `<button class="danger" id="f-delete">Delete</button>`}</div>
+      <div><button class="ghost" id="f-close">Close</button><button class="primary" id="f-save">Save</button></div>
+    </div>
+    ${isNew ? "" : `<button type="button" class="ghost small" id="history-toggle" style="margin-top:14px">Show history</button><div id="history" hidden style="margin-top:10px"></div>`}
+  </div>`;
+
+const collectRepairValues = (fromCin7, picker) => {
+  const values = {
+    status: $("f-status").value,
+    dateReceivedLab: $("f-lab").value,
+    productCode: picker.picked.code,
+    productName: picker.picked.name,
+    category: $("f-category").value.trim(),
+    paymentStatus: $("f-payment").value,
+    description: $("f-description").value.trim(),
+    repairTime: numberOrBlank($("f-time").value),
+    materialCost: numberOrBlank($("f-cost").value),
+    dateOut: $("f-out").value,
+  };
+  if (!fromCin7) {
+    Object.assign(values, {
+      invoiceNumber: $("f-invoice").value.trim(),
+      customerName: $("f-customer").value.trim(),
+      orderCreated: $("f-created").value,
+      item: $("f-class").value.trim(),
+      qty: Number($("f-qty").value) || 1,
+    });
+  }
+  return values;
+};
+
+const validateRepairValues = (values, fromCin7) => {
+  if (!fromCin7 && (!values.invoiceNumber || !values.item)) return "Invoice number and class are required.";
+  return null;
+};
+
+const saveRepairFromForm = async (r, isNew, fromCin7, picker, categories, close) => {
+  const values = collectRepairValues(fromCin7, picker);
+  const validationMessage = validateRepairValues(values, fromCin7);
+  if (validationMessage) return showBanner(validationMessage);
+  if (picker.hasUnpickedText()) return showBanner("Pick a product from the list, or clear the product field.");
+  if (values.category && values.category !== r.category && categories.length && !categories.includes(values.category)) {
+    return showBanner("Pick a category from the list.");
+  }
+
+  const comment = $("f-comment").value.trim();
+  try {
+    if (isNew) {
+      await createRepair(values, [newEvent("event", "Repair added"), ...(comment ? [newEvent("comment", comment)] : [])]);
+    } else {
+      const changes = withLabDate(r, changedFields(r, values));
+      const events = [];
+      const summary = describeChanges(r, changes);
+      if (summary) events.push(newEvent("event", summary));
+      if (comment) events.push(newEvent("comment", comment));
+      if (events.length) await saveRepair(r.id, changes, events);
+    }
+    close();
+  } catch (err) { showBanner("Could not save: " + err.message); }
+};
+
 // Search-as-you-type over the Cin7 product list. Only a product picked from the list can be saved.
 // Picking a product also fills in (and locks) its Cin7 category.
 function setupProductPicker(r, categoryInput) {
@@ -129,45 +208,13 @@ export function openRepair(repair) {
   refreshHistory();
 
   if (!isNew) {
-    $("f-delete").onclick = async () => {
+    $("f-delete").onclick = () => {
       if (!confirm("Delete this repair and its history?")) return;
-      try { await deleteRepair(r.id); close(); } catch (err) { showBanner("Could not delete: " + err.message); }
+      deleteRepair(r.id).then(() => close()).catch((err) => showBanner("Could not delete: " + err.message));
     };
   }
 
-  $("f-save").onclick = async () => {
-    const values = {
-      status: $("f-status").value, dateReceivedLab: $("f-lab").value, productCode: picker.picked.code, productName: picker.picked.name,
-      category: $("f-category").value.trim(), paymentStatus: $("f-payment").value, description: $("f-description").value.trim(),
-      repairTime: numberOrBlank($("f-time").value), materialCost: numberOrBlank($("f-cost").value), dateOut: $("f-out").value,
-    };
-    if (!fromCin7) {
-      Object.assign(values, {
-        invoiceNumber: $("f-invoice").value.trim(), customerName: $("f-customer").value.trim(),
-        orderCreated: $("f-created").value, item: $("f-class").value.trim(), qty: Number($("f-qty").value) || 1,
-      });
-      if (!values.invoiceNumber || !values.item) return showBanner("Invoice number and class are required.");
-    }
-    if (picker.hasUnpickedText()) return showBanner("Pick a product from the list, or clear the product field.");
-    if (values.category && values.category !== r.category && categories.length && !categories.includes(values.category)) {
-      return showBanner("Pick a category from the list.");
-    }
-
-    const comment = $("f-comment").value.trim();
-    try {
-      if (isNew) {
-        await createRepair(values, [newEvent("event", "Repair added"), ...(comment ? [newEvent("comment", comment)] : [])]);
-      } else {
-        const changes = withLabDate(r, changedFields(r, values));
-        const events = [];
-        const summary = describeChanges(r, changes);
-        if (summary) events.push(newEvent("event", summary));
-        if (comment) events.push(newEvent("comment", comment));
-        if (events.length) await saveRepair(r.id, changes, events);
-      }
-      close();
-    } catch (err) { showBanner("Could not save: " + err.message); }
-  };
+  $("f-save").onclick = () => saveRepairFromForm(r, isNew, fromCin7, picker, categories, close);
 }
 
 const changedFields = (before, values) =>

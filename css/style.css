@@ -19,6 +19,7 @@ input, select, textarea, button { font: inherit; }
 input, select, textarea { width: 100%; padding: 8px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--ink); }
 textarea { min-height: 56px; resize: vertical; }
 button { padding: 9px 14px; border: 0; border-radius: 8px; background: var(--chip); color: var(--ink); cursor: pointer; }
+button:disabled { opacity: .6; cursor: wait; }
 button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 button.ghost { background: transparent; border: 1px solid var(--line); }
 button.danger { background: transparent; border: 1px solid var(--line); color: var(--danger); }

@@ -18,6 +18,21 @@ function setView(view) {
   renderRepairs();
 }
 
+function setSyncState(syncing) {
+  const button = $("force-sync");
+  button.disabled = syncing;
+  button.textContent = syncing ? "Syncing…" : "⟳ Force sync";
+  button.title = syncing ? "Sync in progress…" : "Re-check Cin7 for new orders and product changes";
+}
+
+function formatSyncError(err) {
+  const message = err?.message || String(err || "Unknown sync error");
+  if (/non-2xx|not found|404|Edge Function|could not find/i.test(message)) {
+    return "Sync failed: the 'cin7-sync' edge function is missing, not deployed, or not accessible to the signed-in user.";
+  }
+  return "Sync failed: " + message;
+}
+
 function showLogin(message) {
   const back = document.createElement("div");
   back.className = "modal-back";
@@ -56,13 +71,16 @@ $("search").oninput = renderRepairs;
 $("filter-status").onchange = renderRepairs;
 $("add-repair").onclick = () => openRepair(null);
 $("force-sync").onclick = async () => {
-  $("force-sync").disabled = true;
+  setSyncState(true);
   showBanner("Syncing with Cin7 — this can take a few seconds…");
   try {
     const result = await forceSync();
     showBanner(`Synced. Orders added: ${result.orders?.added ?? 0}, updated: ${result.orders?.updated ?? 0}. Products saved: ${result.products?.productsSaved ?? 0}.`);
-  } catch (err) { showBanner("Sync failed: " + err.message); }
-  $("force-sync").disabled = false;
+  } catch (err) {
+    showBanner(formatSyncError(err));
+  } finally {
+    setSyncState(false);
+  }
 };
 
 const { data: { session } } = await auth.getSession();
