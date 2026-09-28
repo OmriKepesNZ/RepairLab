@@ -30,12 +30,12 @@ button.ghost{background:transparent;border:1px solid var(--line);}
 .viewToggle button{border-radius:0;background:var(--panel);}
 .viewToggle button.active{background:var(--accent);color:var(--accent-ink);font-weight:600;}
 .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel);}
-table{border-collapse:collapse;width:100%;min-width:920px;font-size:.85rem;}
+table{border-collapse:collapse;width:100%;min-width:1250px;font-size:.85rem;}
 th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;}
 th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.4px;}
 tbody tr{cursor:pointer;}tbody tr:hover{background:var(--chip-bg);}
 .pill{padding:3px 9px;border-radius:99px;font-size:.72rem;font-weight:600;display:inline-block;}
-.pill.recv{background:#e4e0cf;color:#6b5a1a;}.pill.prog{background:#dce6f2;color:#1d4f7a;}
+.pill.recv{background:#e4e0cf;color:#6b5a1a;}.pill.cin7{background:#ece6f5;color:#5b3f8c;}.pill.prog{background:#dce6f2;color:#1d4f7a;}
 .pill.ready{background:#e2ecdf;color:var(--accent);}.pill.done{background:var(--chip-bg);color:var(--muted);}
 .pill.unpaid{background:#f5ddd7;color:var(--danger);}.pill.paid{background:#e2ecdf;color:var(--ok);}.pill.waived{background:var(--chip-bg);color:var(--muted);}
 .rowbtn{padding:5px 9px;font-size:.75rem;}
@@ -68,6 +68,7 @@ tbody tr{cursor:pointer;}tbody tr:hover{background:var(--chip-bg);}
 .ev .txt{white-space:pre-wrap;}
 .ev.comment .txt{background:var(--chip-bg);padding:7px 10px;border-radius:8px;margin-top:3px;}
 .ev .by{color:var(--muted);font-size:.72rem;margin-top:2px;}
+.cin7box{white-space:pre-wrap;background:var(--chip-bg);padding:8px 10px;border-radius:7px;font-size:.83rem;}
 .banner{background:#f5ddd7;color:var(--danger);padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:.85rem;}
 </style>
 </head>
@@ -85,7 +86,7 @@ tbody tr{cursor:pointer;}tbody tr:hover{background:var(--chip-bg);}
   </div>
   <div class="tablewrap" id="tableView">
     <table>
-      <thead><tr><th>Invoice #</th><th>Received</th><th>Item</th><th>Category</th><th>Qty</th><th>Status</th><th>Payment</th><th>Out date</th><th>Repair time (min)</th><th>Material cost</th><th></th></tr></thead>
+      <thead><tr><th>Invoice #</th><th>Customer</th><th>Order created</th><th>In lab</th><th>Item</th><th>Category</th><th>Qty</th><th>Status</th><th>Payment</th><th>Out date</th><th>Repair time (min)</th><th>Material cost</th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <div class="empty" id="emptyMsg" style="display:none;">No repairs match — add one above.</div>
@@ -93,21 +94,23 @@ tbody tr{cursor:pointer;}tbody tr:hover{background:var(--chip-bg);}
   <div class="board" id="boardView" style="display:none;"></div>
 </main>
 
+<script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const SUPABASE_URL="https://pcqvwnsrdpetvrnyqanm.supabase.co",SUPABASE_KEY="sb_publishable_QEeBUgXqayCGCKdmJtTW3A_P_BZQR1s";
-const STATUSES=["Received","In Progress","Ready for Pickup","Completed"];
+const SUPABASE_URL=APP_CONFIG.url,SUPABASE_KEY=APP_CONFIG.key;
+const STATUSES=["Created in Cin7","Received","In Progress","Ready for Pickup","Completed"];
 const PAYMENTS=["Unpaid","Paid","Waived"];
 const CATEGORIES=["Jacket","Pants","Bag","Boots/Footwear","Vest","Base Layer","Other"];
-const statusClass={"Received":"recv","In Progress":"prog","Ready for Pickup":"ready","Completed":"done"};
+const statusClass={"Created in Cin7":"cin7","Received":"recv","In Progress":"prog","Ready for Pickup":"ready","Completed":"done"};
 const payClass={"Unpaid":"unpaid","Paid":"paid","Waived":"waived"};
-const LABELS={invoiceNumber:"invoice #",qty:"qty",dateReceived:"date received",dateOut:"date out",item:"item",category:"category",description:"description",status:"status",paymentStatus:"payment",repairTime:"repair time",materialCost:"material cost"};
+const LABELS={invoiceNumber:"invoice #",customerName:"customer",qty:"qty",orderCreated:"order created",dateReceivedLab:"received in lab",dateOut:"date out",item:"item",category:"category",description:"description",status:"status",paymentStatus:"payment",repairTime:"repair time",materialCost:"material cost"};
 
 let db=null,me={name:"Someone"},repairs=[],view="table",openId=null;
 
 const $=id=>document.getElementById(id);
 const esc=s=>(s??"").toString().replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmtDate=d=>d||"—";
+const today=()=>new Date().toLocaleDateString("en-CA");
 const fmtTs=t=>{try{return new Date(t).toLocaleString("en-NZ",{day:"numeric",month:"short",year:"numeric",hour:"numeric",minute:"2-digit"});}catch(e){return t;}};
 const totalTime=r=>r.repairTime!=null?(+r.repairTime||0):(+r.unpickingTime||0)+(+r.fixingTime||0)+(+r.otherTime||0);
 const money=v=>v==null||v===""?"—":"$"+(+v).toFixed(2);
@@ -118,11 +121,11 @@ function showBanner(m){$("banner").innerHTML=`<div class="banner">${esc(m)}</div
 
 /* ---- data layer (Supabase) ---- */
 const mkEvent=(type,text)=>({type,text,by_name:me.name,source:null});
-const toRow=d=>({invoice_number:d.invoiceNumber,qty:d.qty,date_received:d.dateReceived||null,date_out:d.dateOut||null,item:d.item,category:d.category,description:d.description,status:d.status,payment_status:d.paymentStatus,repair_time:d.repairTime,material_cost:d.materialCost});
-const fromRow=r=>({id:r.id,invoiceNumber:r.invoice_number,qty:r.qty,dateReceived:r.date_received||"",dateOut:r.date_out||"",item:r.item,category:r.category,description:r.description,status:r.status,paymentStatus:r.payment_status,repairTime:r.repair_time,materialCost:r.material_cost,
+const toRow=d=>({invoice_number:d.invoiceNumber,qty:d.qty,order_created:d.orderCreated||null,date_received_lab:d.dateReceivedLab||null,customer_name:d.customerName||null,date_out:d.dateOut||null,item:d.item,category:d.category||null,description:d.description,status:d.status,payment_status:d.paymentStatus,repair_time:d.repairTime,material_cost:d.materialCost});
+const fromRow=r=>({id:r.id,invoiceNumber:r.invoice_number,qty:r.qty,orderCreated:r.order_created||"",dateReceivedLab:r.date_received_lab||"",customerName:r.customer_name||"",cin7Comments:r.cin7_comments||"",dateOut:r.date_out||"",item:r.item,category:r.category,description:r.description,status:r.status,paymentStatus:r.payment_status,repairTime:r.repair_time,materialCost:r.material_cost,
   events:(r.repair_events||[]).map(e=>({id:e.id,type:e.type,text:e.text,by:e.by_name,source:e.source,at:e.created_at}))});
 async function load(){
-  const {data,error}=await db.from("repairs").select("*, repair_events(*)").order("date_received",{ascending:false}).limit(1000);
+  const {data,error}=await db.from("repairs").select("*, repair_events(*)").order("order_created",{ascending:false}).limit(1000);
   if(error){showBanner("Load error: "+error.message);return;}
   repairs=data.map(fromRow);render();
 }
@@ -151,9 +154,9 @@ function filtered(ignoreStatus){
   return repairs.filter(r=>{
     if(!ignoreStatus&&fs&&r.status!==fs)return false;
     if(fp&&r.paymentStatus!==fp)return false;
-    if(q&&!`${r.invoiceNumber} ${r.item} ${r.description}`.toLowerCase().includes(q))return false;
+    if(q&&!`${r.invoiceNumber} ${r.customerName} ${r.item} ${r.description}`.toLowerCase().includes(q))return false;
     return true;
-  }).sort((a,b)=>(b.dateReceived||"").localeCompare(a.dateReceived||""));
+  }).sort((a,b)=>(b.orderCreated||"").localeCompare(a.orderCreated||""));
 }
 function render(){
   $("tableView").style.display=view==="table"?"":"none";
@@ -171,7 +174,7 @@ function render(){
 function renderTable(){
   const list=filtered(false);
   $("emptyMsg").style.display=list.length?"none":"block";
-  $("rows").innerHTML=list.map(r=>`<tr data-upd="${r.id}"><td>${esc(r.invoiceNumber)}</td><td>${fmtDate(r.dateReceived)}</td><td>${esc(r.item)}</td><td>${esc(r.category)}</td><td>${esc(r.qty)}</td>
+  $("rows").innerHTML=list.map(r=>`<tr data-upd="${r.id}"><td>${esc(r.invoiceNumber)}</td><td>${esc(r.customerName)}</td><td>${fmtDate(r.orderCreated)}</td><td>${fmtDate(r.dateReceivedLab)}</td><td>${esc(r.item)}</td><td>${esc(r.category)}</td><td>${esc(r.qty)}</td>
   <td><span class="pill ${statusClass[r.status]||""}">${esc(r.status)}</span></td><td><span class="pill ${payClass[r.paymentStatus]||""}">${esc(r.paymentStatus)}</span></td>
   <td>${fmtDate(r.dateOut)}</td><td>${totalTime(r)}</td><td>${money(r.materialCost)}</td><td><button class="rowbtn ghost">Update</button></td></tr>`).join("");
   $("rows").querySelectorAll("[data-upd]").forEach(b=>b.onclick=()=>openModal(repairs.find(r=>r.id===b.dataset.upd)));
@@ -181,8 +184,8 @@ function renderBoard(){
   $("boardView").innerHTML=STATUSES.map(s=>{
     const items=list.filter(r=>r.status===s);
     return `<div class="col" data-status="${s}"><div class="col-head"><span>${s}</span><span>${items.length}</span></div><div class="col-body">${items.map(r=>`
-    <div class="card" draggable="true" data-id="${r.id}"><b>${esc(r.invoiceNumber)} · ${esc(r.item)}</b>
-    <div class="meta">${esc(r.category)} · qty ${esc(r.qty)} · ${totalTime(r)} min · in ${fmtDate(r.dateReceived)}</div>
+    <div class="card" draggable="true" data-id="${r.id}"><b>${esc(r.invoiceNumber)} · ${esc(r.item)}</b><div class="meta">${esc(r.customerName)}</div>
+    <div class="meta">${r.category?esc(r.category)+" · ":""}qty ${esc(r.qty)} · ${totalTime(r)} min · ordered ${fmtDate(r.orderCreated)}</div>
     <div class="pills"><span class="pill ${payClass[r.paymentStatus]||""}">${esc(r.paymentStatus)}</span><button class="rowbtn ghost">Update</button></div></div>`).join("")}</div></div>`;}).join("");
   const bv=$("boardView");
   bv.querySelectorAll(".card").forEach(c=>{
@@ -197,7 +200,8 @@ function renderBoard(){
       e.preventDefault();col.classList.remove("dragover");
       const r=repairs.find(x=>x.id===e.dataTransfer.getData("text/plain"));
       if(!r||r.status===col.dataset.status||!db)return;
-      try{await addEvents(r.id,[mkEvent("event",`Status: ${r.status} → ${col.dataset.status}`)],{status:col.dataset.status});}
+      try{const ex={status:col.dataset.status};if(r.status==="Created in Cin7"&&!r.dateReceivedLab)ex.dateReceivedLab=today();
+        await addEvents(r.id,[mkEvent("event",`Status: ${r.status} → ${col.dataset.status}`+(ex.dateReceivedLab?` (received in lab ${ex.dateReceivedLab})`:""))],ex);}
       catch(err){showBanner("Could not move: "+err.message);}
     };
   });
@@ -211,15 +215,18 @@ function openModal(existing){
   back.innerHTML=`<div class="modal"><h2>${existing?"Update repair":"New repair"}</h2>
   <div class="grid2">
     <div class="field"><label>Invoice number</label><input id="f-invoice" value="${esc(r.invoiceNumber)}"></div>
-    <div class="field"><label>Qty</label><input id="f-qty" type="number" min="1" value="${r.qty??1}"></div>
-    <div class="field"><label>Date received</label><input id="f-received" type="date" value="${r.dateReceived||""}"></div>
-    <div class="field"><label>Date out</label><input id="f-out" type="date" value="${r.dateOut||""}"></div>
+    <div class="field"><label>Customer</label><input id="f-customer" value="${esc(r.customerName)}"></div>
+    <div class="field"><label>Order created</label><input id="f-created" type="date" value="${r.orderCreated||""}"></div>
+    <div class="field"><label>Received in lab</label><input id="f-lab" type="date" value="${r.dateReceivedLab||(existing?"":today())}"></div>
     <div class="field"><label>Item</label><input id="f-item" value="${esc(r.item)}"></div>
-    <div class="field"><label>Category</label><select id="f-category">${CATEGORIES.map(c=>`<option ${r.category===c?"selected":""}>${c}</option>`).join("")}</select></div>
+    <div class="field"><label>Category</label><select id="f-category"><option value="">—</option>${CATEGORIES.map(c=>`<option ${r.category===c?"selected":""}>${c}</option>`).join("")}</select></div>
+    <div class="field"><label>Qty</label><input id="f-qty" type="number" min="1" value="${r.qty??1}"></div>
+    <div class="field"><label>Date out</label><input id="f-out" type="date" value="${r.dateOut||""}"></div>
   </div>
+  ${r.cin7Comments?`<div class="field"><label>Cin7 order comments</label><div class="cin7box">${esc(r.cin7Comments)}</div></div>`:""}
   <div class="field"><label>Description of repair</label><textarea id="f-desc">${esc(r.description)}</textarea></div>
   <div class="grid2">
-    <div class="field"><label>Status</label><select id="f-status">${STATUSES.map(s=>`<option ${r.status===s?"selected":""}>${s}</option>`).join("")}</select></div>
+    <div class="field"><label>Status</label><select id="f-status">${STATUSES.map(s=>`<option ${(r.status||"Received")===s?"selected":""}>${s}</option>`).join("")}</select></div>
     <div class="field"><label>Payment status</label><select id="f-payment">${PAYMENTS.map(p=>`<option ${r.paymentStatus===p?"selected":""}>${p}</option>`).join("")}</select></div>
     <div class="field"><label>Repair time (min)</label><input id="f-repair" type="number" min="0" value="${totalTime(r)}"></div>
     <div class="field"><label>Raw material cost ($)</label><input id="f-material" type="number" min="0" step="0.01" value="${r.materialCost??""}"></div>
@@ -237,18 +244,19 @@ function openModal(existing){
       try{await deleteRepair(existing.id);close();}catch(e){showBanner("Could not delete: "+e.message);}};
   }
   $("f-save").onclick=async()=>{
-    const data={invoiceNumber:$("f-invoice").value.trim(),qty:+$("f-qty").value||1,dateReceived:$("f-received").value,dateOut:$("f-out").value,
+    const data={invoiceNumber:$("f-invoice").value.trim(),qty:+$("f-qty").value||1,orderCreated:$("f-created").value,dateReceivedLab:$("f-lab").value,customerName:$("f-customer").value.trim(),dateOut:$("f-out").value,
       item:$("f-item").value.trim(),category:$("f-category").value,description:$("f-desc").value.trim(),status:$("f-status").value,
       paymentStatus:$("f-payment").value,repairTime:+$("f-repair").value||0,materialCost:$("f-material").value===""?null:(+$("f-material").value||0)};
     if(!data.invoiceNumber||!data.item){showBanner("Invoice number and item are required.");return;}
     const cText=$("f-comment").value.trim();
+    if(existing&&existing.status==="Created in Cin7"&&data.status!=="Created in Cin7"&&!data.dateReceivedLab)data.dateReceivedLab=today();
     try{
       if(existing){
         const parts=[];const prev={...r,repairTime:totalTime(r)};const norm=v=>v==null?"":v;
         for(const k of Object.keys(LABELS)){
           if(norm(prev[k])!==norm(data[k])){
             if(k==="status"||k==="paymentStatus")parts.push(`${LABELS[k]}: ${r[k]||"—"} → ${data[k]}`);
-            else if(k==="dateReceived"||k==="dateOut")parts.push(`${LABELS[k]}: ${data[k]||"cleared"}`);
+            else if(["orderCreated","dateReceivedLab","dateOut"].includes(k))parts.push(`${LABELS[k]}: ${data[k]||"cleared"}`);
             else parts.push(LABELS[k]);
           }
         }
