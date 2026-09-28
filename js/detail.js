@@ -89,9 +89,9 @@ export function openRepair(repair) {
       ${field("Product (search Cin7 products)", productBox(r))}
       ${field("Category", `<input id="f-category" list="categories" autocomplete="off" placeholder="Search categories…" value="${esc(r.category)}"><datalist id="categories"></datalist>`)}
       ${field("Received in lab", `<input id="f-lab" type="date" value="${r.dateReceivedLab || ""}">`)}
-      ${field("Date out", `<input id="f-out" type="date" value="${r.dateOut || ""}">`)}
+      ${field("Date completed", `<input id="f-out" type="date" value="${r.dateOut || ""}">`)}
       ${field("Repair time (min)", `<input id="f-time" type="number" min="0" value="${r.repairTime ?? ""}">`)}
-      ${field("Raw material cost ($)", `<input id="f-cost" type="number" min="0" step="0.01" value="${r.materialCost ?? ""}">`)}
+      ${field("Raw material cost", `<div class="money"><span>$</span><input id="f-cost" type="number" min="0" step="0.01" value="${r.materialCost ?? ""}"></div>`)}
       ${field("Repair description", `<textarea id="f-description">${esc(r.description)}</textarea>${r.cin7Comments ? `<button type="button" class="ghost small" id="copy-cin7">Copy from Cin7</button>` : ""}`, true)}
     </div>
     <div style="margin-top:12px">${field("Comment", `<textarea id="f-comment" placeholder="Add a comment (posted when you save)…"></textarea>`, true)}</div>
