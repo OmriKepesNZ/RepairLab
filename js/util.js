@@ -10,7 +10,6 @@ export const fmtDateTime = (iso) => new Date(iso).toLocaleString("en-NZ", { day:
 
 export const STATUSES = ["Created in Cin7", "Received", "In Progress", "Ready for Pickup", "Completed"];
 export const PAYMENTS = ["Unpaid", "Paid", "Waived"];
-export const CATEGORIES = ["Jacket", "Pants", "Bag", "Boots/Footwear", "Vest", "Base Layer", "Other"];
 const STATUS_CLASS = { "Created in Cin7": "cin7", Received: "recv", "In Progress": "prog", "Ready for Pickup": "ready", Completed: "done" };
 const PAYMENT_CLASS = { Unpaid: "unpaid", Paid: "paid", Waived: "waived" };
 export const statusPill = (status) => `<span class="pill ${STATUS_CLASS[status] || ""}">${esc(status)}</span>`;
