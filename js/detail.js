@@ -1,6 +1,6 @@
 // The repair pop-up: Cin7 details (fixed), lab fields (editable), comment, and history.
-import { $, esc, fmtDate, fmtDateTime, today, describeChanges, showBanner, statusPill, STATUSES, PAYMENTS, CATEGORIES } from "./util.js";
-import { state, createRepair, saveRepair, deleteRepair, searchProducts, newEvent, withLabDate } from "./data.js";
+import { $, esc, fmtDate, fmtDateTime, today, describeChanges, showBanner, statusPill, STATUSES, PAYMENTS } from "./util.js";
+import { state, createRepair, saveRepair, deleteRepair, searchProducts, loadCategories, newEvent, withLabDate } from "./data.js";
 
 let openId = null; // the repair currently open, so its history can refresh live
 
@@ -35,9 +35,11 @@ const productBox = (r) => `
   <div class="product-results" id="product-results"></div>`;
 
 // Search-as-you-type over the Cin7 product list. Only a product picked from the list can be saved.
-function setupProductPicker(r) {
+// Picking a product also fills in (and locks) its Cin7 category.
+function setupProductPicker(r, categoryInput) {
   const picked = { code: r.productCode || "", name: r.productName || "" };
   const input = $("f-product"), results = $("product-results");
+  categoryInput.disabled = Boolean(r.productCode && r.category);
   let timer;
   input.oninput = () => {
     clearTimeout(timer);
@@ -47,7 +49,7 @@ function setupProductPicker(r) {
       try {
         const products = await searchProducts(text);
         results.innerHTML = products.length
-          ? products.map((p) => `<div data-code="${esc(p.code)}" data-label="${esc(p.label)}">${esc(p.label)} <span class="muted">(${esc(p.code)})</span></div>`).join("")
+          ? products.map((p) => `<div data-code="${esc(p.code)}" data-label="${esc(p.label)}" data-category="${esc(p.category)}">${esc(p.label)} <span class="muted">(${esc(p.code)})</span></div>`).join("")
           : `<div class="muted">No matching Cin7 products</div>`;
       } catch (err) { results.innerHTML = `<div>${esc(err.message)}</div>`; }
       results.style.display = "block";
@@ -60,8 +62,12 @@ function setupProductPicker(r) {
     picked.name = item.dataset.label;
     input.value = picked.name;
     results.style.display = "none";
+    if (item.dataset.category) { categoryInput.value = item.dataset.category; categoryInput.disabled = true; }
   };
-  $("f-product-clear").onclick = () => { picked.code = ""; picked.name = ""; input.value = ""; results.style.display = "none"; };
+  $("f-product-clear").onclick = () => {
+    picked.code = ""; picked.name = ""; input.value = ""; results.style.display = "none";
+    if (categoryInput.disabled) { categoryInput.disabled = false; categoryInput.value = ""; }
+  };
   return { picked, hasUnpickedText: () => input.value.trim() !== "" && input.value !== picked.name };
 }
 
@@ -79,28 +85,47 @@ export function openRepair(repair) {
     <h3>Lab</h3>
     <div class="grid">
       ${field("Status", `<select id="f-status">${options(STATUSES, r.status)}</select>`)}
-      ${field("Received in lab", `<input id="f-lab" type="date" value="${r.dateReceivedLab || ""}">`)}
-      ${field("Product (search Cin7 products)", productBox(r), true)}
-      ${field("Category", `<select id="f-category">${options(CATEGORIES, r.category, true)}</select>`)}
       ${field("Payment", `<select id="f-payment">${options(PAYMENTS, r.paymentStatus)}</select>`)}
-      ${field("Repair description", `<textarea id="f-description">${esc(r.description)}</textarea>`, true)}
+      ${field("Product (search Cin7 products)", productBox(r))}
+      ${field("Category", `<input id="f-category" list="categories" autocomplete="off" placeholder="Search categories…" value="${esc(r.category)}"><datalist id="categories"></datalist>`)}
+      ${field("Received in lab", `<input id="f-lab" type="date" value="${r.dateReceivedLab || ""}">`)}
+      ${field("Date out", `<input id="f-out" type="date" value="${r.dateOut || ""}">`)}
       ${field("Repair time (min)", `<input id="f-time" type="number" min="0" value="${r.repairTime ?? ""}">`)}
       ${field("Raw material cost ($)", `<input id="f-cost" type="number" min="0" step="0.01" value="${r.materialCost ?? ""}">`)}
-      ${field("Date out", `<input id="f-out" type="date" value="${r.dateOut || ""}">`)}
+      ${field("Repair description", `<textarea id="f-description">${esc(r.description)}</textarea>${r.cin7Comments ? `<button type="button" class="ghost small" id="copy-cin7">Copy from Cin7</button>` : ""}`, true)}
     </div>
     <div style="margin-top:12px">${field("Comment", `<textarea id="f-comment" placeholder="Add a comment (posted when you save)…"></textarea>`, true)}</div>
     <div class="actions">
       <div>${isNew ? "" : `<button class="danger" id="f-delete">Delete</button>`}</div>
       <div><button class="ghost" id="f-close">Close</button><button class="primary" id="f-save">Save</button></div>
     </div>
-    ${isNew ? "" : `<h3>History</h3><div id="history"></div>`}
+    ${isNew ? "" : `<button type="button" class="ghost small" id="history-toggle" style="margin-top:14px">Show history</button><div id="history" hidden style="margin-top:10px"></div>`}
   </div>`;
   document.body.appendChild(back);
 
   const close = () => { openId = null; back.remove(); };
   back.onclick = (e) => { if (e.target === back) close(); };
   $("f-close").onclick = close;
-  const picker = setupProductPicker(r);
+  const categoryInput = $("f-category");
+  const picker = setupProductPicker(r, categoryInput);
+  let categories = [];
+  loadCategories().then((list) => {
+    categories = list;
+    $("categories").innerHTML = list.map((c) => `<option value="${esc(c)}">`).join("");
+  });
+  if (r.cin7Comments) {
+    $("copy-cin7").onclick = () => {
+      const box = $("f-description");
+      box.value = box.value ? box.value + "\n" + r.cin7Comments : r.cin7Comments;
+    };
+  }
+  if (!isNew) {
+    $("history-toggle").onclick = () => {
+      const box = $("history");
+      box.hidden = !box.hidden;
+      $("history-toggle").textContent = box.hidden ? "Show history" : "Hide history";
+    };
+  }
   refreshHistory();
 
   if (!isNew) {
@@ -113,7 +138,7 @@ export function openRepair(repair) {
   $("f-save").onclick = async () => {
     const values = {
       status: $("f-status").value, dateReceivedLab: $("f-lab").value, productCode: picker.picked.code, productName: picker.picked.name,
-      category: $("f-category").value, paymentStatus: $("f-payment").value, description: $("f-description").value.trim(),
+      category: $("f-category").value.trim(), paymentStatus: $("f-payment").value, description: $("f-description").value.trim(),
       repairTime: numberOrBlank($("f-time").value), materialCost: numberOrBlank($("f-cost").value), dateOut: $("f-out").value,
     };
     if (!fromCin7) {
@@ -124,6 +149,9 @@ export function openRepair(repair) {
       if (!values.invoiceNumber || !values.item) return showBanner("Invoice number and class are required.");
     }
     if (picker.hasUnpickedText()) return showBanner("Pick a product from the list, or clear the product field.");
+    if (values.category && values.category !== r.category && categories.length && !categories.includes(values.category)) {
+      return showBanner("Pick a category from the list.");
+    }
 
     const comment = $("f-comment").value.trim();
     try {
