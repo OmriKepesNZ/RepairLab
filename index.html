@@ -16,10 +16,11 @@
   <main>
     <div id="banner"></div>
     <div class="toolbar">
-      <div class="segmented"><button id="view-list" class="active">List</button><button id="view-board">Board</button></div>
+      <div class="segmented"><button id="view-list">List</button><button id="view-board" class="active">Board</button></div>
       <input type="search" id="search" placeholder="Search invoice, customer, product…">
       <select id="filter-status"></select>
       <button class="primary" id="add-repair">+ New repair</button>
+      <button class="ghost" id="force-sync" title="Re-check Cin7 for new orders and product changes">⟳ Force sync</button>
     </div>
     <div id="summary" class="muted"></div>
     <div id="content"></div>
