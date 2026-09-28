@@ -1,0 +1,103 @@
+// Everything that talks to Supabase. The rest of the app only uses these functions.
+import { showBanner, today } from "./util.js";
+
+export const state = { repairs: [], me: { name: "Someone" }, view: "list" };
+
+let db;
+let onChange = () => {};
+
+// App field name -> database column name.
+const COLUMNS = {
+  invoiceNumber: "invoice_number", customerName: "customer_name", orderCreated: "order_created",
+  dateReceivedLab: "date_received_lab", dateOut: "date_out", item: "item", qty: "qty", category: "category",
+  description: "description", status: "status", paymentStatus: "payment_status", repairTime: "repair_time",
+  materialCost: "material_cost", productCode: "product_code", productName: "product_name",
+  cin7Comments: "cin7_comments", cin7Key: "cin7_key",
+};
+
+const toRow = (fields) =>
+  Object.fromEntries(Object.entries(fields).filter(([key]) => COLUMNS[key]).map(([key, value]) => [COLUMNS[key], value === "" ? null : value]));
+
+const fromRow = (row) => ({
+  id: row.id,
+  ...Object.fromEntries(Object.entries(COLUMNS).map(([key, column]) => [key, row[column] ?? ""])),
+  events: (row.repair_events || []).map((e) => ({ type: e.type, text: e.text, by: e.by_name, source: e.source, at: e.created_at })),
+});
+
+export function connect(onDataChanged) {
+  onChange = onDataChanged;
+  db = supabase.createClient(APP_CONFIG.url, APP_CONFIG.key);
+  return db.auth;
+}
+
+export async function loadRepairs() {
+  const { data, error } = await db.from("repairs").select("*, repair_events(*)").order("created_at", { ascending: false }).limit(1000);
+  if (error) return showBanner("Could not load repairs: " + error.message);
+  state.repairs = data.map(fromRow);
+  onChange();
+}
+
+// Reload whenever anyone changes a repair, so everyone sees updates live.
+export function watchChanges() {
+  let timer;
+  const reload = () => { clearTimeout(timer); timer = setTimeout(loadRepairs, 300); };
+  const channel = db.channel("repair-lab");
+  for (const table of ["repairs", "repair_events"]) channel.on("postgres_changes", { event: "*", schema: "public", table }, reload);
+  channel.subscribe();
+}
+
+export const newEvent = (type, text) => ({ type, text, by_name: state.me.name, source: null });
+
+async function insertEvents(repairId, events) {
+  if (!events.length) return;
+  const rows = events.map((e) => ({ repair_id: repairId, type: e.type, text: e.text, by_name: e.by_name, source: e.source }));
+  const { error } = await db.from("repair_events").insert(rows);
+  if (error) throw error;
+}
+
+export async function createRepair(fields, events) {
+  const { data, error } = await db.from("repairs").insert(toRow(fields)).select("id").single();
+  if (error) throw error;
+  await insertEvents(data.id, events);
+  await loadRepairs();
+}
+
+export async function saveRepair(id, changes, events) {
+  if (Object.keys(changes).length) {
+    const { error } = await db.from("repairs").update(toRow(changes)).eq("id", id);
+    if (error) throw error;
+  }
+  await insertEvents(id, events);
+  await loadRepairs();
+}
+
+export async function deleteRepair(id) {
+  const { error } = await db.from("repairs").delete().eq("id", id);
+  if (error) throw error;
+  await loadRepairs();
+}
+
+// When a garment leaves "Created in Cin7" it has arrived, so stamp today's date as "received in lab".
+export function withLabDate(repair, changes) {
+  const arrived = repair.status === "Created in Cin7" && (changes.status ?? repair.status) !== "Created in Cin7";
+  if (arrived && !repair.dateReceivedLab && !changes.dateReceivedLab) changes.dateReceivedLab = today();
+  return changes;
+}
+
+export async function moveStatus(repair, status) {
+  const changes = withLabDate(repair, { status });
+  const note = `Status: ${repair.status} → ${status}` + (changes.dateReceivedLab ? ` (received in lab ${changes.dateReceivedLab})` : "");
+  await saveRepair(repair.id, changes, [newEvent("event", note)]);
+}
+
+// Search the Cin7 product list (copied into the "products" table by the sync function).
+export async function searchProducts(text) {
+  let query = db.from("products").select("code, label").limit(15);
+  for (const word of text.toLowerCase().split(/\s+/)) {
+    const clean = word.replace(/[%_*,()\\]/g, "");
+    if (clean) query = query.ilike("search", `%${clean}%`);
+  }
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
