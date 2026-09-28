@@ -92,7 +92,7 @@ export async function moveStatus(repair, status) {
 
 // Search the Cin7 product list (copied into the "products" table by the sync function).
 export async function searchProducts(text) {
-  let query = db.from("products").select("code, label").limit(15);
+  let query = db.from("products").select("code, label, category").limit(15);
   for (const word of text.toLowerCase().split(/\s+/)) {
     const clean = word.replace(/[%_*,()\\]/g, "");
     if (clean) query = query.ilike("search", `%${clean}%`);
@@ -100,4 +100,14 @@ export async function searchProducts(text) {
   const { data, error } = await query;
   if (error) throw error;
   return data;
+}
+
+// The categories that exist in Cin7 (taken from the copied product list). Loaded once.
+let categoryCache = null;
+export async function loadCategories() {
+  if (!categoryCache) {
+    const { data, error } = await db.from("product_categories").select("category").order("category");
+    if (!error) categoryCache = data.map((row) => row.category);
+  }
+  return categoryCache || [];
 }
