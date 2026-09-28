@@ -1,6 +1,6 @@
 // Start-up: sign-in, toolbar, and wiring the other modules together.
 import { $, esc, showBanner, STATUSES } from "./util.js";
-import { state, connect, loadRepairs, watchChanges } from "./data.js";
+import { state, connect, loadRepairs, watchChanges, forceSync } from "./data.js";
 import { renderRepairs, initRepairViews } from "./list.js";
 import { openRepair, refreshHistory } from "./detail.js";
 
@@ -44,6 +44,7 @@ async function start() {
   $("signout").hidden = false;
   $("signout").onclick = async () => { await auth.signOut(); location.reload(); };
   initRepairViews();
+  setView("board");
   await loadRepairs();
   watchChanges();
 }
@@ -54,6 +55,15 @@ $("view-board").onclick = () => setView("board");
 $("search").oninput = renderRepairs;
 $("filter-status").onchange = renderRepairs;
 $("add-repair").onclick = () => openRepair(null);
+$("force-sync").onclick = async () => {
+  $("force-sync").disabled = true;
+  showBanner("Syncing with Cin7 — this can take a few seconds…");
+  try {
+    const result = await forceSync();
+    showBanner(`Synced. Orders added: ${result.orders?.added ?? 0}, updated: ${result.orders?.updated ?? 0}. Products saved: ${result.products?.productsSaved ?? 0}.`);
+  } catch (err) { showBanner("Sync failed: " + err.message); }
+  $("force-sync").disabled = false;
+};
 
 const { data: { session } } = await auth.getSession();
 if (session) start(); else showLogin();
