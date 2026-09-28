@@ -8,7 +8,7 @@ export const today = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
 export const fmtDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" }) : "—");
 export const fmtDateTime = (iso) => new Date(iso).toLocaleString("en-NZ", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 
-export const STATUSES = ["Created in Cin7", "Received", "In Progress", "Ready for Pickup", "Completed"];
+export const STATUSES = ["Created in Cin7", "In Lab", "In Progress", "Ready for Pickup", "Completed"];
 export const PAYMENTS = ["Unpaid", "Paid", "Waived"];
 const STATUS_CLASS = { "Created in Cin7": "cin7", Received: "recv", "In Progress": "prog", "Ready for Pickup": "ready", Completed: "done" };
 const PAYMENT_CLASS = { Unpaid: "unpaid", Paid: "paid", Waived: "waived" };
