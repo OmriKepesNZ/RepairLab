@@ -3,6 +3,8 @@ import { $, esc, fmtDate, paymentPill, showBanner, statusPill, STATUSES } from "
 import { state, moveStatus } from "./data.js";
 import { openRepair } from "./detail.js";
 
+let completedExpanded = false;
+
 function matchingRepairs(applyStatusFilter) {
   const text = $("search").value.trim().toLowerCase();
   const status = $("filter-status").value;
@@ -31,14 +33,21 @@ function listHtml() {
 
 function boardHtml() {
   const repairs = matchingRepairs(false);
+  const searchActive = $("search").value.trim() !== "";
+  const completedVisible = completedExpanded || searchActive;
   const columns = STATUSES.map((status) => {
-    const cards = repairs.filter((r) => r.status === status).map((r) => `
+    const statusRepairs = repairs.filter((r) => r.status === status);
+    const cards = (status !== "Completed" || completedVisible) ? statusRepairs.map((r) => `
       <div class="card" draggable="true" data-id="${r.id}">
         <b>${esc(r.invoiceNumber)}</b> · ${esc(r.customerName)}
         ${r.productName ? `<div class="muted">${esc(r.productName)}</div>` : ""}
         <div style="margin-top:6px">${paymentPill(r.paymentStatus)}</div>
-      </div>`);
-    return `<div class="col" data-status="${status}"><div class="col-head"><span>${status}</span><span>${cards.length}</span></div><div class="col-body">${cards.join("")}</div></div>`;
+      </div>`) : [];
+    const header = status === "Completed"
+      ? `<button type="button" class="col-head archive-toggle" data-toggle-completed aria-expanded="${completedVisible}" aria-label="Completed archive, ${statusRepairs.length} repairs${searchActive ? ", matching search" : ""}" ${searchActive ? "disabled" : ""}><span>Completed archive</span><span class="archive-count">${statusRepairs.length}</span><span class="archive-chevron" aria-hidden="true"></span></button>`
+      : `<div class="col-head"><span>${status}</span><span>${statusRepairs.length}</span></div>`;
+    const body = status !== "Completed" || completedVisible ? `<div class="col-body">${cards.join("")}</div>` : "";
+    return `<div class="col${status === "Completed" ? " completed-col" : ""}" data-status="${status}">${header}${body}</div>`;
   });
   return `<div class="board">${columns.join("")}</div>`;
 }
@@ -57,6 +66,13 @@ export function initRepairViews() {
   const clearHighlights = () => content.querySelectorAll(".dragover, .dragging").forEach((el) => el.classList.remove("dragover", "dragging"));
 
   content.onclick = (e) => {
+    const archiveToggle = e.target.closest("[data-toggle-completed]");
+    if (archiveToggle) {
+      if ($("search").value.trim()) return;
+      completedExpanded = !completedExpanded;
+      renderRepairs();
+      return;
+    }
     const item = e.target.closest("[data-id]");
     if (item) openRepair(repairFor(item));
   };

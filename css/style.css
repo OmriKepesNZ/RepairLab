@@ -84,7 +84,14 @@ tbody tr:last-child td { border-bottom: 0; }
 .col { flex: 0 0 260px; display: flex; flex-direction: column; max-height: calc(100vh - 230px); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); }
 .col.dragover { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .col-head { display: flex; justify-content: space-between; align-items: center; padding: 11px 12px; border-bottom: 1px solid var(--line); font-size: .72rem; font-weight: 700; text-transform: uppercase; color: var(--muted); }
-.col-head span:last-child { min-width: 22px; padding: 2px 6px; border-radius: 10px; background: var(--chip); text-align: center; font-variant-numeric: tabular-nums; }
+.col-head span:last-child:not(.archive-chevron) { min-width: 22px; padding: 2px 6px; border-radius: 10px; background: var(--chip); text-align: center; font-variant-numeric: tabular-nums; }
+.archive-toggle { width: 100%; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; text-align: left; }
+.archive-toggle:hover:not(:disabled) { background: var(--accent-soft); }
+.archive-toggle:disabled, .archive-toggle:disabled:hover { opacity: 1; background: transparent; cursor: default; }
+.archive-toggle > span:first-child { flex: 1; }
+.archive-count { min-width: 22px; padding: 2px 6px; border-radius: 10px; background: var(--chip); text-align: center; font-variant-numeric: tabular-nums; }
+.archive-chevron { display: inline-block; width: 7px; height: 7px; margin-left: 9px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s ease; }
+.archive-toggle[aria-expanded="true"] .archive-chevron { transform: rotate(45deg); }
 .col-body { flex: 1; min-height: 70px; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; padding: 8px; }
 .card { padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 5px; font-size: .85rem; cursor: grab; box-shadow: var(--shadow); }
 .card:hover { border-color: #9ab5a2; }
