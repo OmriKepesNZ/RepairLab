@@ -15,9 +15,10 @@ function matchingRepairs(applyStatusFilter) {
   });
 }
 
-function listHtml() {
-  const rows = matchingRepairs(true).map((r) => `
-    <tr data-id="${r.id}">
+function tableHtml(repairs, emptyMessage = "No repairs to show.") {
+  if (!repairs.length) return `<div class="table-wrap"><div class="empty">${esc(emptyMessage)}</div></div>`;
+  const rows = repairs.map((r) => `
+    <tr class="repair-row" draggable="true" data-id="${r.id}">
       <td><b>${esc(r.invoiceNumber)}</b></td>
       <td>${esc(r.customerName)}</td>
       <td>${esc(r.productName)}</td>
@@ -25,35 +26,51 @@ function listHtml() {
       <td>${fmtDate(r.dateReceivedLab)}</td>
       <td>${paymentPill(r.paymentStatus)}</td>
     </tr>`);
-  if (!rows.length) return `<div class="table-wrap"><div class="empty">No repairs to show.</div></div>`;
   return `<div class="table-wrap"><table>
     <thead><tr><th>Invoice</th><th>Customer</th><th>Product</th><th>Status</th><th>In lab</th><th>Payment</th></tr></thead>
     <tbody>${rows.join("")}</tbody></table></div>`;
 }
 
+function listHtml() {
+  const repairs = matchingRepairs(true).filter((repair) => repair.status !== "Completed");
+  return tableHtml(repairs, "No active repairs to show.");
+}
+
+function repairCard(repair) {
+  return `
+    <div class="card" draggable="true" data-id="${repair.id}">
+      <b>${esc(repair.invoiceNumber)}</b> · ${esc(repair.customerName)}
+      ${repair.productName ? `<div class="muted">${esc(repair.productName)}</div>` : ""}
+      <div class="card-payment">${paymentPill(repair.paymentStatus)}</div>
+    </div>`;
+}
+
 function boardHtml() {
   const repairs = matchingRepairs(false);
-  const searchActive = $("search").value.trim() !== "";
-  const completedVisible = completedExpanded || searchActive;
-  const columns = STATUSES.map((status) => {
+  const columns = STATUSES.filter((status) => status !== "Completed").map((status) => {
     const statusRepairs = repairs.filter((r) => r.status === status);
-    const cards = (status !== "Completed" || completedVisible) ? statusRepairs.map((r) => `
-      <div class="card" draggable="true" data-id="${r.id}">
-        <b>${esc(r.invoiceNumber)}</b> · ${esc(r.customerName)}
-        ${r.productName ? `<div class="muted">${esc(r.productName)}</div>` : ""}
-        <div style="margin-top:6px">${paymentPill(r.paymentStatus)}</div>
-      </div>`) : [];
-    const header = status === "Completed"
-      ? `<button type="button" class="col-head archive-toggle" data-toggle-completed aria-expanded="${completedVisible}" aria-label="Completed archive, ${statusRepairs.length} repairs${searchActive ? ", matching search" : ""}" ${searchActive ? "disabled" : ""}><span>Completed archive</span><span class="archive-count">${statusRepairs.length}</span><span class="archive-chevron" aria-hidden="true"></span></button>`
-      : `<div class="col-head"><span>${status}</span><span>${statusRepairs.length}</span></div>`;
-    const body = status !== "Completed" || completedVisible ? `<div class="col-body">${cards.join("")}</div>` : "";
-    return `<div class="col${status === "Completed" ? " completed-col" : ""}" data-status="${status}">${header}${body}</div>`;
+    return `<div class="col" data-status="${status}"><div class="col-head"><span>${status}</span><span>${statusRepairs.length}</span></div><div class="col-body">${statusRepairs.map(repairCard).join("")}</div></div>`;
   });
   return `<div class="board">${columns.join("")}</div>`;
 }
 
+function archiveHtml() {
+  const searchActive = $("search").value.trim() !== "";
+  const completedFilter = state.view === "list" && $("filter-status").value === "Completed";
+  const completedVisible = completedExpanded || searchActive || completedFilter;
+  const completed = matchingRepairs(false).filter((repair) => repair.status === "Completed");
+  const archiveCount = state.repairs.filter((repair) => repair.status === "Completed").length;
+  const archiveLabel = searchActive ? "Search results" : completedFilter ? "Filtered by status" : completedExpanded ? "Hide archive" : "View archive";
+  const archiveRows = tableHtml(completed, "No completed repairs match this search.");
+  return `<section class="archive-dropzone" data-status="Completed" aria-label="Completed archive">
+      <div class="archive-message"><span class="archive-icon" aria-hidden="true"></span><p>Drag a repair here once it's picked up and paid — it's filed away, out of the active board.</p></div>
+      <div class="archive-actions"><span class="archive-total">${archiveCount} archived</span><button type="button" class="archive-toggle" data-toggle-completed aria-expanded="${completedVisible}" aria-label="Completed archive, ${archiveCount} repairs${searchActive ? ", matching search" : ""}" ${searchActive || completedFilter ? "disabled" : ""}>${archiveLabel}</button></div>
+      ${completedVisible ? `<div class="archive-list">${archiveRows}</div>` : ""}
+    </section>`;
+}
+
 export function renderRepairs() {
-  $("content").innerHTML = state.view === "list" ? listHtml() : boardHtml();
+  $("content").innerHTML = (state.view === "list" ? listHtml() : boardHtml()) + archiveHtml();
   const open = state.repairs.filter((r) => r.status !== "Completed").length;
   const unpaid = state.repairs.filter((r) => r.paymentStatus === "Unpaid").length;
   $("summary").textContent = `${state.repairs.length} repairs · ${open} open · ${unpaid} unpaid`;
@@ -77,27 +94,27 @@ export function initRepairViews() {
     if (item) openRepair(repairFor(item));
   };
   content.ondragstart = (e) => {
-    const card = e.target.closest(".card");
-    if (!card) return;
-    e.dataTransfer.setData("text/plain", card.dataset.id);
-    card.classList.add("dragging");
+    const repair = e.target.closest(".card, .repair-row");
+    if (!repair) return;
+    e.dataTransfer.setData("text/plain", repair.dataset.id);
+    repair.classList.add("dragging");
   };
   content.ondragend = clearHighlights;
   content.ondragover = (e) => {
-    const column = e.target.closest(".col");
-    if (!column) return;
+    const target = e.target.closest("[data-status]");
+    if (!target) return;
     e.preventDefault();
     content.querySelectorAll(".dragover").forEach((el) => el.classList.remove("dragover"));
-    column.classList.add("dragover");
+    target.classList.add("dragover");
   };
   content.ondrop = async (e) => {
-    const column = e.target.closest(".col");
-    if (!column) return;
+    const target = e.target.closest("[data-status]");
+    if (!target) return;
     e.preventDefault();
     clearHighlights();
     const repair = state.repairs.find((r) => r.id === e.dataTransfer.getData("text/plain"));
-    if (!repair || repair.status === column.dataset.status) return;
-    try { await moveStatus(repair, column.dataset.status); }
+    if (!repair || repair.status === target.dataset.status) return;
+    try { await moveStatus(repair, target.dataset.status); }
     catch (err) { showBanner("Could not move repair: " + err.message); }
   };
 }
