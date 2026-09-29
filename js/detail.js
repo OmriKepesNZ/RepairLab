@@ -84,7 +84,7 @@ const collectRepairValues = (fromCin7, picker) => {
 };
 
 const validateRepairValues = (values, fromCin7) => {
-  if (!fromCin7 && (!values.invoiceNumber || !values.item)) return "Invoice number and class are required.";
+  if (!fromCin7 && !values.invoiceNumber) return "Invoice number is required.";
   return null;
 };
 
