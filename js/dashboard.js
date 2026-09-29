@@ -16,7 +16,7 @@ function repairsInPeriod() {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   if (period === "year") start.setMonth(0, 1);
-  else start.setDate(start.getDate() - Number(period) + 1);
+  else start.setDate(start.getDate() - Number.parseInt(period, 10) + 1);
   return state.repairs.filter((repair) => {
     const date = parseDate(dateFor(repair));
     return date && date >= start;
@@ -67,7 +67,7 @@ function overview(repairs) {
   const costs = repairs.map((repair) => numberOrNull(repair.materialCost)).filter((value) => value != null);
   const statuses = STATUSES.map((status) => ({ label: status, value: repairs.filter((repair) => repair.status === status).length }));
   const payments = groupBy(repairs, (repair) => repair.paymentStatus || "Not recorded");
-  const products = groupBy(repairs, (repair) => repair.productName || repair.item).slice(0, 6);
+  const products = groupBy(repairs.filter((repair) => repair.productName), (repair) => repair.productName).slice(0, 6);
 
   return `<div class="dashboard-metrics">
       ${metric("Repairs", repairs.length, "records in selected period")}
@@ -75,7 +75,7 @@ function overview(repairs) {
       ${metric("Avg. turnaround", displayNumber(average(completed), " days"), `${completed.length} completed records with dates`)}
       ${metric("Recorded material cost", currency(costs.reduce((sum, value) => sum + value, 0)), `${costs.length} repairs with a cost entered`)}
     </div>
-    <div class="dashboard-report-grid">${chart("Repairs by status", statuses)}${chart("Payment status", payments)}${chart("Most common products / classes", products)}</div>`;
+    <div class="dashboard-report-grid">${chart("Repairs by status", statuses)}${chart("Payment status", payments)}${chart("Most common products", products)}</div>`;
 }
 
 function timeReport(repairs) {
@@ -97,20 +97,21 @@ function costsReport(repairs) {
   const recorded = repairs.map((repair) => ({ repair, cost: numberOrNull(repair.materialCost) })).filter((entry) => entry.cost != null);
   const total = recorded.reduce((sum, entry) => sum + entry.cost, 0);
   const monthly = monthGroups(recorded.map((entry) => entry.repair), (repair) => numberOrNull(repair.materialCost) || 0);
-  const byProduct = groupBy(recorded.map((entry) => entry.repair), (repair) => repair.productName || repair.item, (repair) => numberOrNull(repair.materialCost) || 0).slice(0, 8);
+  const byProduct = groupBy(recorded.map((entry) => entry.repair).filter((repair) => repair.productName), (repair) => repair.productName, (repair) => numberOrNull(repair.materialCost) || 0).slice(0, 8);
+  const byClass = groupBy(recorded.map((entry) => entry.repair), (repair) => repair.item, (repair) => numberOrNull(repair.materialCost) || 0).slice(0, 8);
   const unrecorded = repairs.length - recorded.length;
   return `<div class="dashboard-metrics">
       ${metric("Recorded material cost", currency(total), "not a full operating-cost or revenue figure")}
       ${metric("Repairs with cost", recorded.length, "cost entered")}
       ${metric("No cost recorded", unrecorded, "blank cost is excluded from totals")}
     </div>
-    <div class="dashboard-report-grid">${chart("Material cost by month", monthly, currency)}${chart("Recorded material cost by product / class", byProduct, currency)}</div>`;
+    <div class="dashboard-report-grid">${chart("Material cost by month", monthly, currency)}${chart("Recorded material cost by product", byProduct, currency)}${chart("Recorded material cost by repair class", byClass, currency)}</div>`;
 }
 
 function mixReport(repairs) {
   const classes = groupBy(repairs, (repair) => repair.item).slice(0, 10);
   const categories = groupBy(repairs, (repair) => repair.category).slice(0, 10);
-  const products = groupBy(repairs, (repair) => repair.productName).slice(0, 10);
+  const products = groupBy(repairs.filter((repair) => repair.productName), (repair) => repair.productName).slice(0, 10);
   return `<div class="dashboard-report-grid dashboard-report-grid-three">${chart("Repair class", classes)}${chart("Product category", categories)}${chart("Product", products)}</div>`;
 }
 

@@ -18,7 +18,7 @@ function listHtml() {
     <tr data-id="${r.id}">
       <td><b>${esc(r.invoiceNumber)}</b></td>
       <td>${esc(r.customerName)}</td>
-      <td>${esc(r.productName || r.item)}</td>
+      <td>${esc(r.productName)}</td>
       <td>${statusPill(r.status)}</td>
       <td>${fmtDate(r.dateReceivedLab)}</td>
       <td>${paymentPill(r.paymentStatus)}</td>
@@ -35,7 +35,7 @@ function boardHtml() {
     const cards = repairs.filter((r) => r.status === status).map((r) => `
       <div class="card" draggable="true" data-id="${r.id}">
         <b>${esc(r.invoiceNumber)}</b> · ${esc(r.customerName)}
-        <div class="muted">${esc(r.productName || r.item)}</div>
+        ${r.productName ? `<div class="muted">${esc(r.productName)}</div>` : ""}
         <div style="margin-top:6px">${paymentPill(r.paymentStatus)}</div>
       </div>`);
     return `<div class="col" data-status="${status}"><div class="col-head"><span>${status}</span><span>${cards.length}</span></div><div class="col-body">${cards.join("")}</div></div>`;
