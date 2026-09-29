@@ -2,9 +2,11 @@
 import { $, esc, showBanner, STATUSES } from "./util.js";
 import { state, connect, loadRepairs, watchChanges, forceSync } from "./data.js";
 import { renderRepairs, initRepairViews } from "./list.js";
+import { renderDashboard } from "./dashboard.js";
 import { openRepair, refreshHistory } from "./detail.js";
 
-const auth = connect(() => { renderRepairs(); refreshHistory(); });
+const renderActiveView = () => state.view === "dashboard" ? renderDashboard() : renderRepairs();
+const auth = connect(() => { renderActiveView(); refreshHistory(); });
 
 // "rob.gray@company.com" -> "Rob Gray" (used to sign history entries)
 const displayName = (user) =>
@@ -14,8 +16,12 @@ function setView(view) {
   state.view = view;
   $("view-list").classList.toggle("active", view === "list");
   $("view-board").classList.toggle("active", view === "board");
-  $("filter-status").hidden = view === "board"; // the board already shows one column per status
-  renderRepairs();
+  $("view-dashboard").classList.toggle("active", view === "dashboard");
+  const isDashboard = view === "dashboard";
+  $("search").hidden = isDashboard;
+  $("filter-status").hidden = view === "board" || isDashboard;
+  $("summary").hidden = isDashboard;
+  renderActiveView();
 }
 
 function setSyncState(syncing) {
@@ -64,8 +70,9 @@ async function start() {
 $("filter-status").innerHTML = `<option value="">All statuses</option>` + STATUSES.map((s) => `<option>${s}</option>`).join("");
 $("view-list").onclick = () => setView("list");
 $("view-board").onclick = () => setView("board");
-$("search").oninput = renderRepairs;
-$("filter-status").onchange = renderRepairs;
+$("view-dashboard").onclick = () => setView("dashboard");
+$("search").oninput = renderActiveView;
+$("filter-status").onchange = renderActiveView;
 $("add-repair").onclick = () => openRepair(null);
 $("force-sync").onclick = async () => {
   setSyncState(true);
