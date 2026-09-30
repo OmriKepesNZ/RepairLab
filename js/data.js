@@ -1,7 +1,7 @@
 // Everything that talks to Supabase. The rest of the app only uses these functions.
 import { showBanner, today, STATUSES } from "./util.js";
 
-export const state = { repairs: [], me: { name: "Someone" }, view: "board" };
+export const state = { repairs: [], me: { name: "Someone" }, view: "board", role: "staff", isAdmin: false };
 
 let db;
 let onChange = () => {};
@@ -28,6 +28,14 @@ export function connect(onDataChanged) {
   onChange = onDataChanged;
   db = supabase.createClient(APP_CONFIG.url, APP_CONFIG.key);
   return db.auth;
+}
+
+export async function loadUserRole(userId) {
+  const { data, error } = await db.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
+  if (error) throw error;
+  state.role = data?.role === "admin" ? "admin" : "staff";
+  state.isAdmin = state.role === "admin";
+  return state.role;
 }
 
 export async function loadRepairs() {
@@ -110,6 +118,24 @@ export async function addProduct(label, category, code) {
   return data;
 }
 
+export async function listCustomProducts() {
+  const { data, error } = await db.from("products").select("code, label, category").like("code", "CUSTOM-%").order("label");
+  if (error) throw error;
+  return data;
+}
+
+export async function updateCustomProduct(code, label, category) {
+  const { data, error } = await db.from("products").update({ label, category }).eq("code", code).select("code").maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Custom product was not found or could not be updated.");
+}
+
+export async function deleteCustomProduct(code) {
+  const { data, error } = await db.from("products").delete().eq("code", code).select("code").maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Custom product was not found or could not be deleted.");
+}
+
 // The categories that exist in Cin7 (taken from the copied product list). Loaded once.
 let categoryCache = null;
 export async function loadCategories() {
@@ -148,6 +174,16 @@ async function invokeEdgeFunction(name, body) {
     throw error;
   }
   return data;
+}
+
+export async function listAdminUsers() {
+  const result = await invokeEdgeFunction("admin-users", { action: "list" });
+  return result.users;
+}
+
+export async function createAdminUser(user) {
+  const result = await invokeEdgeFunction("admin-users", { action: "create", ...user });
+  return result.user;
 }
 
 export async function forceSync() {

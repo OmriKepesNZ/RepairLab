@@ -1,11 +1,12 @@
 // Start-up: sign-in, toolbar, and wiring the other modules together.
 import { $, esc, showBanner, STATUSES } from "./util.js";
-import { state, connect, loadRepairs, watchChanges, forceSync } from "./data.js";
+import { state, connect, loadRepairs, loadUserRole, watchChanges, forceSync } from "./data.js";
 import { renderRepairs, initRepairViews } from "./list.js";
 import { renderDashboard } from "./dashboard.js";
+import { renderAdmin, initAdmin, loadAdminData } from "./admin.js";
 import { openRepair, refreshHistory } from "./detail.js";
 
-const renderActiveView = () => state.view === "dashboard" ? renderDashboard() : renderRepairs();
+const renderActiveView = () => state.view === "dashboard" ? renderDashboard() : state.view === "admin" ? renderAdmin() : renderRepairs();
 const auth = connect(() => { renderActiveView(); refreshHistory(); });
 
 // "rob.gray@company.com" -> "Rob Gray" (used to sign history entries)
@@ -17,10 +18,14 @@ function setView(view) {
   $("view-list").classList.toggle("active", view === "list");
   $("view-board").classList.toggle("active", view === "board");
   $("view-dashboard").classList.toggle("active", view === "dashboard");
+  $("view-admin").classList.toggle("active", view === "admin");
   const isDashboard = view === "dashboard";
-  $("search").hidden = isDashboard;
-  $("filter-status").hidden = view === "board" || isDashboard;
-  $("summary").hidden = isDashboard;
+  const isAdmin = view === "admin";
+  $("search").hidden = isDashboard || isAdmin;
+  $("filter-status").hidden = view === "board" || isDashboard || isAdmin;
+  $("add-repair").hidden = isAdmin;
+  $("force-sync").hidden = isAdmin;
+  $("summary").hidden = isDashboard || isAdmin;
   renderActiveView();
 }
 
@@ -59,9 +64,18 @@ function showLogin(message) {
 async function start() {
   const { data: { user } } = await auth.getUser();
   state.me = { name: displayName(user) };
+  try {
+    await loadUserRole(user.id);
+  } catch (err) {
+    state.role = "staff";
+    state.isAdmin = false;
+    showBanner("Could not load access level: " + err.message);
+  }
+  $("view-admin").hidden = !state.isAdmin;
   $("signout").hidden = false;
   $("signout").onclick = async () => { await auth.signOut(); location.reload(); };
   initRepairViews();
+  initAdmin();
   setView("board");
   await loadRepairs();
   watchChanges();
@@ -71,6 +85,7 @@ $("filter-status").innerHTML = `<option value="">All statuses</option>` + STATUS
 $("view-list").onclick = () => setView("list");
 $("view-board").onclick = () => setView("board");
 $("view-dashboard").onclick = () => setView("dashboard");
+$("view-admin").onclick = () => { if (state.isAdmin) { setView("admin"); loadAdminData(); } };
 $("search").oninput = renderActiveView;
 $("filter-status").onchange = renderActiveView;
 $("add-repair").onclick = () => openRepair(null);
