@@ -25,16 +25,15 @@ jobs:
         uses: actions/checkout@v4
       - name: Configure Pages
         uses: actions/configure-pages@v5
+      - name: Prepare site files
+        run: |
+          mkdir -p _site
+          cp index.html config.js favicon.png logo.png _site/
+          cp -R css js _site/
       - name: Upload site files
         uses: actions/upload-pages-artifact@v3
         with:
-          path: |
-            index.html
-            config.js
-            favicon.png
-            logo.png
-            css/
-            js/
+          path: _site
       - name: Deploy to Pages
         id: deployment
         uses: actions/deploy-pages@v4
