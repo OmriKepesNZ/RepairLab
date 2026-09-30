@@ -1,6 +1,6 @@
 // The repair pop-up: Cin7 details (fixed), lab fields (editable), comment, and history.
 import { $, esc, fmtDate, fmtDateTime, today, describeChanges, showBanner, statusPill, STATUSES, PAYMENTS } from "./util.js";
-import { state, createRepair, saveRepair, deleteRepair, searchProducts, loadCategories, newEvent, withLabDate } from "./data.js";
+import { state, createRepair, saveRepair, deleteRepair, searchProducts, addProduct, loadCategories, newEvent, withLabDate } from "./data.js";
 
 let openId = null; // the repair currently open, so its history can refresh live
 
@@ -9,6 +9,11 @@ const options = (list, selected, withBlank) =>
 
 const field = (label, control, wide) => `<div class="field${wide ? " wide" : ""}"><label>${label}</label>${control}</div>`;
 const numberOrBlank = (text) => (text === "" ? "" : Number(text));
+const categoryBox = (r) => `
+  <div class="category-picker">
+    <div class="category-input-row"><input id="f-category" autocomplete="off" aria-autocomplete="list" aria-controls="category-options" aria-expanded="false" placeholder="Search categories…" value="${esc(r.category)}"><button type="button" class="ghost category-toggle" id="f-category-toggle" aria-label="Show categories" title="Show categories" aria-expanded="false">▾</button></div>
+    <div class="category-options" id="category-options" role="listbox" hidden></div>
+  </div>`;
 
 // Shown for repairs that came from Cin7: plain text, nothing to edit.
 const cin7Details = (r) => `
@@ -26,7 +31,7 @@ const manualDetails = (r) => `
     ${field("Invoice number", `<input id="f-invoice" value="${esc(r.invoiceNumber)}">`)}
     ${field("Customer", `<input id="f-customer" value="${esc(r.customerName)}">`)}
     ${field("Order created", `<input id="f-created" type="date" value="${r.orderCreated || ""}">`)}
-    ${field("Class", `<input id="f-class" list="classes" value="${esc(r.item)}"><datalist id="classes"><option value="Repair Non-Warranty"><option value="Repair Warranty"></datalist>`)}
+    ${field("Class", `<select id="f-class">${options(["Repair Non-Warranty", "Repair Warranty"], r.item, true)}</select>`)}
     ${field("Qty", `<input id="f-qty" type="number" min="1" value="${r.qty || 1}">`)}
   </div>`;
 
@@ -43,7 +48,7 @@ const renderRepairModal = (r, isNew, fromCin7) => `
       ${field("Status", `<select id="f-status">${options(STATUSES, r.status)}</select>`) }
       ${field("Payment", `<select id="f-payment">${options(PAYMENTS, r.paymentStatus)}</select>`) }
       ${field("Product (search Cin7 products)", productBox(r))}
-      ${field("Category", `<input id="f-category" list="categories" autocomplete="off" placeholder="Search categories…" value="${esc(r.category)}"><datalist id="categories"></datalist>`) }
+      ${field("Category", categoryBox(r))}
       ${field("Received in lab", `<input id="f-lab" type="date" value="${r.dateReceivedLab || ""}">`) }
       ${field("Date completed", `<input id="f-out" type="date" value="${r.dateOut || ""}">`) }
       ${field("Repair time (min)", `<input id="f-time" type="number" min="0" value="${r.repairTime ?? ""}">`) }
@@ -88,17 +93,23 @@ const validateRepairValues = (values, fromCin7) => {
   return null;
 };
 
-const saveRepairFromForm = async (r, isNew, fromCin7, picker, categories, close) => {
+const saveRepairFromForm = async (r, isNew, fromCin7, picker, categoryPicker, categories, close) => {
   const values = collectRepairValues(fromCin7, picker);
   const validationMessage = validateRepairValues(values, fromCin7);
   if (validationMessage) return showBanner(validationMessage);
   if (picker.hasUnpickedText()) return showBanner("Pick a product from the list, or clear the product field.");
+  if (picker.pendingProduct && (!categories.includes(values.category) || !categoryPicker.hasSelection())) return showBanner("Choose a category from the list before adding this product.");
   if (values.category && values.category !== r.category && categories.length && !categories.includes(values.category)) {
     return showBanner("Pick a category from the list.");
   }
 
   const comment = $("f-comment").value.trim();
   try {
+    if (picker.pendingProduct) {
+      const product = await addProduct(picker.pendingProduct.name, values.category, picker.pendingProduct.code);
+      values.productCode = product.code;
+      values.productName = product.label;
+    }
     if (isNew) {
       await createRepair(values, [newEvent("event", "Repair added"), ...(comment ? [newEvent("comment", comment)] : [])]);
     } else {
@@ -115,39 +126,117 @@ const saveRepairFromForm = async (r, isNew, fromCin7, picker, categories, close)
 
 // Search-as-you-type over the Cin7 product list. Only a product picked from the list can be saved.
 // Picking a product also fills in (and locks) its Cin7 category.
-function setupProductPicker(r, categoryInput) {
+function setupCategoryPicker(r, getCategories) {
+  const input = $("f-category"), toggle = $("f-category-toggle"), menu = $("category-options");
+  const selected = { value: input.value };
+  input.disabled = Boolean(r.productCode && r.category);
+  toggle.disabled = input.disabled;
+
+  const close = () => {
+    menu.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-expanded", "false");
+  };
+  const render = () => {
+    const query = input.value.trim().toLowerCase();
+    const matches = getCategories().filter((category) => category.toLowerCase().includes(query));
+    menu.innerHTML = matches.length
+      ? matches.map((category) => `<button type="button" role="option" aria-selected="${category === selected.value}" data-category="${esc(category)}">${esc(category)}</button>`).join("")
+      : `<div class="muted">No matching categories</div>`;
+  };
+  const open = () => {
+    render();
+    menu.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    toggle.setAttribute("aria-expanded", "true");
+  };
+
+  input.onfocus = open;
+  input.oninput = () => { selected.value = ""; open(); };
+  toggle.onclick = () => menu.hidden ? open() : close();
+  menu.onclick = (e) => {
+    const option = e.target.closest("[data-category]");
+    if (!option) return;
+    selected.value = option.dataset.category;
+    input.value = selected.value;
+    close();
+  };
+
+  return {
+    clear() {
+      input.disabled = false;
+      toggle.disabled = false;
+      input.value = "";
+      selected.value = "";
+      close();
+    },
+    close,
+    hasSelection: () => selected.value === input.value && Boolean(input.value),
+    refresh: render,
+    select(category, locked = false) {
+      input.value = category;
+      selected.value = category;
+      input.disabled = locked;
+      toggle.disabled = locked;
+      close();
+    },
+    get disabled() { return input.disabled; },
+  };
+}
+
+function setupProductPicker(r, categoryPicker) {
   const picked = { code: r.productCode || "", name: r.productName || "" };
   const input = $("f-product"), results = $("product-results");
-  categoryInput.disabled = Boolean(r.productCode && r.category);
+  let pendingProduct = null;
   let timer;
   input.oninput = () => {
     clearTimeout(timer);
     const text = input.value.trim();
+    if (text !== picked.name) {
+      picked.code = ""; picked.name = ""; pendingProduct = null;
+      categoryPicker.clear();
+    }
+    results.style.display = "none";
     if (text.length < 2) { results.style.display = "none"; return; }
     timer = setTimeout(async () => {
       try {
         const products = await searchProducts(text);
         results.innerHTML = products.length
           ? products.map((p) => `<div data-code="${esc(p.code)}" data-label="${esc(p.label)}" data-category="${esc(p.category)}">${esc(p.label)} <span class="muted">(${esc(p.code)})</span></div>`).join("")
-          : `<div class="muted">No matching Cin7 products</div>`;
+          : `<button type="button" class="product-add" data-add-new="${esc(text)}">+ Add new “${esc(text)}”</button>`;
       } catch (err) { results.innerHTML = `<div>${esc(err.message)}</div>`; }
       results.style.display = "block";
     }, 250);
   };
   results.onclick = (e) => {
+    const add = e.target.closest("[data-add-new]");
+    if (add) {
+      const name = add.dataset.addNew.trim();
+      const code = `CUSTOM-${crypto.randomUUID()}`;
+      pendingProduct = { code, name };
+      picked.code = code; picked.name = name;
+      input.value = name;
+      categoryPicker.clear();
+      results.style.display = "none";
+      return;
+    }
     const item = e.target.closest("[data-code]");
     if (!item) return;
+    pendingProduct = null;
     picked.code = item.dataset.code;
     picked.name = item.dataset.label;
     input.value = picked.name;
     results.style.display = "none";
-    if (item.dataset.category) { categoryInput.value = item.dataset.category; categoryInput.disabled = true; }
+    if (item.dataset.category) categoryPicker.select(item.dataset.category, true);
+    else categoryPicker.clear();
   };
   $("f-product-clear").onclick = () => {
+    const clearCategory = categoryPicker.disabled || pendingProduct;
+    pendingProduct = null;
     picked.code = ""; picked.name = ""; input.value = ""; results.style.display = "none";
-    if (categoryInput.disabled) { categoryInput.disabled = false; categoryInput.value = ""; }
+    if (clearCategory) categoryPicker.clear();
   };
-  return { picked, hasUnpickedText: () => input.value.trim() !== "" && input.value !== picked.name };
+  return { picked, get pendingProduct() { return pendingProduct; }, hasUnpickedText: () => input.value.trim() !== "" && input.value !== picked.name };
 }
 
 export function openRepair(repair) {
@@ -166,7 +255,7 @@ export function openRepair(repair) {
       ${field("Status", `<select id="f-status">${options(STATUSES, r.status)}</select>`)}
       ${field("Payment", `<select id="f-payment">${options(PAYMENTS, r.paymentStatus)}</select>`)}
       ${field("Product (search Cin7 products)", productBox(r))}
-      ${field("Category", `<input id="f-category" list="categories" autocomplete="off" placeholder="Search categories…" value="${esc(r.category)}"><datalist id="categories"></datalist>`)}
+      ${field("Category", categoryBox(r))}
       ${field("Received in lab", `<input id="f-lab" type="date" value="${r.dateReceivedLab || ""}">`)}
       ${field("Date completed", `<input id="f-out" type="date" value="${r.dateOut || ""}">`)}
       ${field("Repair time (min)", `<input id="f-time" type="number" min="0" value="${r.repairTime ?? ""}">`)}
@@ -183,14 +272,17 @@ export function openRepair(repair) {
   document.body.appendChild(back);
 
   const close = () => { openId = null; back.remove(); };
-  back.onclick = (e) => { if (e.target === back) close(); };
   $("f-close").onclick = close;
-  const categoryInput = $("f-category");
-  const picker = setupProductPicker(r, categoryInput);
   let categories = [];
+  const categoryPicker = setupCategoryPicker(r, () => categories);
+  const picker = setupProductPicker(r, categoryPicker);
+  back.onclick = (e) => {
+    if (e.target === back) close();
+    else if (!e.target.closest(".category-picker")) categoryPicker.close();
+  };
   loadCategories().then((list) => {
     categories = list;
-    $("categories").innerHTML = list.map((c) => `<option value="${esc(c)}">`).join("");
+    categoryPicker.refresh();
   });
   if (r.cin7Comments) {
     $("copy-cin7").onclick = () => {
@@ -214,7 +306,7 @@ export function openRepair(repair) {
     };
   }
 
-  $("f-save").onclick = () => saveRepairFromForm(r, isNew, fromCin7, picker, categories, close);
+  $("f-save").onclick = () => saveRepairFromForm(r, isNew, fromCin7, picker, categoryPicker, categories, close);
 }
 
 const changedFields = (before, values) =>

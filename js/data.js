@@ -104,6 +104,12 @@ export async function searchProducts(text) {
   return data;
 }
 
+export async function addProduct(label, category, code) {
+  const { data, error } = await db.from("products").insert({ code, label, category }).select("code, label, category").single();
+  if (error) throw error;
+  return data;
+}
+
 // The categories that exist in Cin7 (taken from the copied product list). Loaded once.
 let categoryCache = null;
 export async function loadCategories() {

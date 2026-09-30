@@ -133,10 +133,21 @@ tbody tr:last-child td { border-bottom: 0; }
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 2px; }
 .field.wide { grid-column: 1 / -1; }
 .field label { font-size: .75rem; color: var(--muted); }
+.category-picker { position: relative; }
+.category-picker:focus-within { z-index: 5; }
+.category-input-row { display: flex; gap: 6px; }
+.category-input-row input { min-width: 0; }
+.category-toggle { flex: 0 0 40px; padding: 5px; font-size: 1rem; }
+.category-options { position: absolute; z-index: 6; top: calc(100% + 4px); right: 0; left: 0; max-height: 180px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); box-shadow: var(--shadow); }
+.category-options button { display: block; width: 100%; padding: 7px 9px; border: 0; border-radius: 0; background: transparent; text-align: left; font-size: .85rem; }
+.category-options button:hover, .category-options button[aria-selected="true"] { background: var(--chip); }
+.category-options .muted { padding: 7px 9px; }
 .product-row { display: flex; gap: 6px; }
 .product-results { display: none; max-height: 180px; overflow-y: auto; margin-top: 4px; border: 1px solid var(--line); border-radius: 7px; }
 .product-results div { padding: 7px 9px; font-size: .85rem; cursor: pointer; }
 .product-results div:hover { background: var(--chip); }
+.product-results .product-add { display: block; width: 100%; padding: 7px 9px; border: 0; border-radius: 0; background: transparent; text-align: left; font-size: .85rem; }
+.product-results .product-add:hover { background: var(--chip); }
 .actions { display: flex; justify-content: space-between; margin-top: 14px; }
 .actions div { display: flex; gap: 8px; }
 .timeline { display: flex; flex-direction: column; gap: 12px; margin-left: 6px; padding-left: 14px; border-left: 2px solid var(--line); }
