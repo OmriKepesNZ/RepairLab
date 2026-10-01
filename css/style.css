@@ -919,6 +919,8 @@ textarea { min-height: 70px; resize: vertical; }
 .drawer-activity { margin-top: 28px; }
 .drawer-activity h3 { margin-bottom: 14px; }
 .drawer-activity .timeline { margin-top: 8px; }
+.lab-notes { margin-top: 12px; }
+.lab-notes h3 { margin: 0 0 14px; }
 .drawer-footer {
   flex: 0 0 auto;
   display: flex;

@@ -11,6 +11,12 @@ const numberOrBlank = (text) => (text === "" ? "" : Number(text));
 const statusLabel = (value) => ({ "Created in Cin7": "To do", "In Lab": "In lab", "In Progress": "In progress", "Ready for Pickup": "Ready for pickup", Completed: "Archived" })[value] || value;
 const orderClassLabel = (value) => value === "CA11002" ? "Warranty repair" : /^CA11001(?:\.|$)/.test(value) ? "Non-warranty repair" : value || "—";
 const statusButtons = (current) => [...STATUSES.slice(0, 4), ...(current === "Completed" ? ["Completed"] : [])].map((value) => `<button type="button" class="status-option${current === value ? " active" : ""}" data-status="${esc(value)}">${esc(statusLabel(value))}</button>`).join("");
+const labNotes = (repair) => {
+  const comments = (repair.events || []).filter((event) => event.type === "comment").sort((a, b) => b.at.localeCompare(a.at));
+  if (!comments.length) return "";
+  return `<div class="drawer-activity lab-notes"><h3>Notes</h3><div class="timeline">${comments.map((event) => `
+    <div class="event comment"><div class="text">${esc(event.text)}</div><div class="who">${esc(event.source || event.by || "Someone")} · ${fmtDateTime(event.at)}</div></div>`).join("")}</div></div>`;
+};
 const categoryBox = (r) => `
   <div class="category-picker">
     <div class="category-input-row"><input id="f-category" autocomplete="off" aria-autocomplete="list" aria-controls="category-options" aria-expanded="false" placeholder="${r.productCode ? "Search categories…" : "Select a product first"}" value="${esc(r.category)}" ${r.productCode ? "" : "disabled"}><button type="button" class="ghost category-toggle" id="f-category-toggle" aria-label="Show categories" title="Show categories" aria-expanded="false">▾</button></div>
@@ -100,6 +106,7 @@ const drawerInfoBlock = (r, isNew, fromCin7) => `
       <div class="drawer-field"><label>Date completed</label><input id="f-out" type="date" value="${esc(r.dateOut || "")}"></div>
     </div>
     <div class="drawer-field drawer-field-wide drawer-comment"><label>Add a note</label><textarea id="f-comment" placeholder="Saved with the repair"></textarea></div>
+    ${isNew ? "" : labNotes(r)}
     ${isNew ? "" : `<div class="drawer-activity"><div class="drawer-activity-head"><h3>Activity</h3><button type="button" class="activity-toggle" id="activity-toggle" aria-expanded="false">View activity</button></div><div id="history" hidden></div></div>`}
   </section>
 `;
