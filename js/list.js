@@ -106,7 +106,8 @@ export function renderRepairs() {
   const open = state.repairs.filter((r) => r.status !== "Completed").length;
   const outstanding = state.repairs.filter((r) => r.paymentStatus === "Unpaid" || r.paymentStatus === "Partial").length;
   const late = state.repairs.filter((repair) => isOverdue(repair)).length;
-  $("summary").innerHTML = `<div><strong>${open}</strong><span>in the lab</span></div><div><strong class="warn">${late}</strong><span>waiting over ${waitingThreshold()} days</span></div><div><strong>${outstanding}</strong><span>unpaid</span></div>`;
+  const urgent = state.repairs.filter((repair) => repair.isUrgent).length;
+  $("summary").innerHTML = `<div><strong>${open}</strong><span>in the lab</span></div><div><strong class="warn">${late}</strong><span>waiting over ${waitingThreshold()} days</span></div><div><strong>${outstanding}</strong><span>unpaid</span></div><div><strong>${urgent}</strong><span>urgent orders</span></div>`;
 }
 
 export function setListFilter(filter) {
