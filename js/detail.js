@@ -297,6 +297,7 @@ export function openRepair(repair) {
   const isNew = !repair;
   const r = repair || { status: "In Lab", paymentStatus: "Unpaid", dateReceivedLab: today() };
   const fromCin7 = Boolean(r.cin7Key);
+  const isArchived = r.status === "Completed";
   openId = r.id || null;
 
   const back = document.createElement("div");
@@ -305,7 +306,7 @@ export function openRepair(repair) {
     <div class="drawer-scroll">${drawerInfoBlock(r, isNew, fromCin7)}</div>
     <div class="drawer-footer">
       <div class="drawer-footer-actions">
-        <button class="drawer-action-archive" id="f-archive" ${isNew ? "hidden" : ""}>Archive</button>
+        <button class="drawer-action-archive" id="f-archive" ${isNew ? "hidden" : ""}>${isArchived ? "Unarchive" : "Archive"}</button>
         ${fromCin7 ? "" : `<button class="danger drawer-action-delete" id="f-delete" ${isNew ? "hidden" : ""}>Delete</button>`}
       </div>
       <button class="primary drawer-action-save" id="f-save">Done</button>
@@ -356,7 +357,8 @@ export function openRepair(repair) {
 
   if (!isNew) {
     $("f-archive").onclick = () => {
-      moveStatus(r, "Completed").then(() => close()).catch((err) => showBanner("Could not archive: " + err.message));
+      const nextStatus = isArchived ? "Ready for Pickup" : "Completed";
+      moveStatus(r, nextStatus).then(() => close()).catch((err) => showBanner(`Could not ${isArchived ? "unarchive" : "archive"}: ` + err.message));
     };
     if (!fromCin7) {
       $("f-delete").onclick = () => {
