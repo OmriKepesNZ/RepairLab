@@ -1,126 +1,113 @@
-import { $, esc, STATUSES } from "./util.js";
+import { $, esc } from "./util.js";
 import { state } from "./data.js";
 
 let period = "90d";
-let report = "overview";
-
+const parseDate = (value) => value ? new Date(`${value.slice(0, 10)}T00:00:00Z`) : null;
 const dateFor = (repair) => repair.dateReceivedLab || repair.orderCreated || repair.dateOut || "";
-const parseDate = (value) => value ? new Date(`${value.slice(0, 10)}T00:00:00`) : null;
 const numberOrNull = (value) => value === "" || value == null || !Number.isFinite(Number(value)) ? null : Number(value);
-const currency = (value) => new Intl.NumberFormat("en-NZ", { style: "currency", currency: "NZD", maximumFractionDigits: 0 }).format(value);
+const currency = (value) => new Intl.NumberFormat("en-NZ", { style: "currency", currency: "NZD", currencyDisplay: "narrowSymbol", maximumFractionDigits: 0 }).format(value);
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
-const displayNumber = (value, suffix = "") => value == null ? "—" : `${new Intl.NumberFormat("en-NZ", { maximumFractionDigits: 1 }).format(value)}${suffix}`;
+const dateKey = (date) => date.toISOString().slice(0, 10);
+const today = () => {
+  const now = new Date();
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+};
 
-function repairsInPeriod() {
-  if (period === "all") return state.repairs;
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  if (period === "year") start.setMonth(0, 1);
-  else start.setDate(start.getDate() - Number.parseInt(period, 10) + 1);
+function completedInPeriod() {
+  const end = today();
+  const start = period === "all" ? null : new Date(end.getTime() - (Number.parseInt(period, 10) - 1) * 864e5);
   return state.repairs.filter((repair) => {
-    const date = parseDate(dateFor(repair));
-    return date && date >= start;
+    const date = parseDate(repair.dateOut);
+    return date && (!start || date >= start) && date <= end;
   });
 }
 
-function metric(label, value, detail) {
-  return `<div class="dashboard-metric"><div class="dashboard-metric-label">${esc(label)}</div><strong>${esc(value)}</strong><div class="muted">${esc(detail)}</div></div>`;
+function repairsForExport() {
+  const end = today();
+  const start = period === "all" ? null : new Date(end.getTime() - (Number.parseInt(period, 10) - 1) * 864e5);
+  return state.repairs.filter((repair) => {
+    const date = parseDate(dateFor(repair));
+    return date && (!start || date >= start) && date <= end;
+  });
 }
 
-function chart(title, entries, format = (value) => String(value)) {
-  const max = Math.max(0, ...entries.map((entry) => entry.value));
-  const rows = entries.length ? entries.map((entry) => {
-    const width = max ? Math.max(entry.value ? 3 : 0, (entry.value / max) * 100) : 0;
-    return `<div class="dashboard-bar-row"><span class="dashboard-bar-label" title="${esc(entry.label)}">${esc(entry.label)}</span><div class="dashboard-bar-track"><div class="dashboard-bar" style="width:${width}%"></div></div><b>${esc(format(entry.value))}</b></div>`;
-  }).join("") : `<div class="empty">No data for this period.</div>`;
-  return `<section class="dashboard-section"><h2>${esc(title)}</h2><div class="dashboard-bars">${rows}</div></section>`;
+function metric(label, value, suffix = "") {
+  return `<article class="insights-metric"><strong>${esc(value)}${suffix ? `<span>${esc(suffix)}</span>` : ""}</strong><div>${esc(label)}</div></article>`;
 }
 
-function groupBy(repairs, getLabel, getValue = () => 1) {
+function groupBy(repairs, getLabel) {
   const groups = new Map();
   for (const repair of repairs) {
     const label = getLabel(repair) || "Not recorded";
-    groups.set(label, (groups.get(label) || 0) + getValue(repair));
+    groups.set(label, (groups.get(label) || 0) + 1);
   }
   return [...groups].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
 }
 
-function monthGroups(repairs, valueFor = () => 1, dateSelector = dateFor) {
-  const groups = new Map();
-  for (const repair of repairs) {
-    const date = parseDate(dateSelector(repair));
-    if (!date) continue;
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    const current = groups.get(key) || { label: date.toLocaleDateString("en-NZ", { month: "short", year: "2-digit" }), value: 0 };
-    current.value += valueFor(repair);
-    groups.set(key, current);
+function mondayOf(date) {
+  const start = new Date(date);
+  start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7);
+  return start;
+}
+
+function weeklyTotals(repairs) {
+  const now = today();
+  const dates = repairs.map((repair) => parseDate(repair.dateOut)).filter(Boolean);
+  if (!dates.length) return [];
+  const days = period === "90d" ? 77 : period === "30d" ? 29 : null;
+  const start = period === "all"
+    ? mondayOf(new Date(Math.min(...dates.map((date) => date.getTime()))))
+    : mondayOf(new Date(now.getTime() - days * 864e5));
+  const end = mondayOf(now);
+  const totals = new Map();
+  for (const date of dates) {
+    const key = dateKey(mondayOf(date));
+    totals.set(key, (totals.get(key) || 0) + 1);
   }
-  return [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([, entry]) => entry);
+  const weeks = [];
+  for (const week = new Date(start); week <= end; week.setUTCDate(week.getUTCDate() + 7)) {
+    const key = dateKey(week);
+    weeks.push({ key, value: totals.get(key) || 0 });
+  }
+  const last = weeks.length - 1;
+  return weeks.map((week, index) => {
+    const ago = Math.floor((end - new Date(`${week.key}T00:00:00Z`)) / (7 * 864e5));
+    return { ...week, label: index === last ? "Now" : index % 3 === 0 ? `${ago}w` : "" };
+  });
 }
 
-function overview(repairs) {
-  const open = repairs.filter((repair) => repair.status !== "Completed").length;
-  const completed = repairs.filter((repair) => repair.dateReceivedLab && repair.dateOut).map((repair) => {
-    const days = (parseDate(repair.dateOut) - parseDate(repair.dateReceivedLab)) / 864e5;
-    return days >= 0 ? days : null;
-  }).filter((days) => days != null);
-  const costs = repairs.map((repair) => numberOrNull(repair.materialCost)).filter((value) => value != null);
-  const statuses = STATUSES.map((status) => ({ label: status, value: repairs.filter((repair) => repair.status === status).length }));
-  const payments = groupBy(repairs, (repair) => repair.paymentStatus || "Not recorded");
-  const products = groupBy(repairs.filter((repair) => repair.productName), (repair) => repair.productName).slice(0, 6);
-
-  return `<div class="dashboard-metrics">
-      ${metric("Repairs", repairs.length, "records in selected period")}
-      ${metric("Open", open, "not marked completed")}
-      ${metric("Avg. turnaround", displayNumber(average(completed), " days"), `${completed.length} completed records with dates`)}
-      ${metric("Recorded material cost", currency(costs.reduce((sum, value) => sum + value, 0)), `${costs.length} repairs with a cost entered`)}
-    </div>
-    <div class="dashboard-report-grid">${chart("Repairs by status", statuses)}${chart("Payment status", payments)}${chart("Most common products", products)}</div>`;
+function weeklyChart(weeks) {
+  if (!weeks.length) return `<div class="insights-empty">No completed repairs in this period.</div>`;
+  const max = Math.max(1, ...weeks.map((week) => week.value));
+  const bars = weeks.map((week) => {
+    const height = week.value ? Math.max(8, week.value / max * 100) : 0;
+    return `<div class="week-column" title="${esc(week.value)} completed"><div class="week-bar-wrap"><div class="week-bar" style="height:${height}%"></div></div><span>${esc(week.label)}</span></div>`;
+  }).join("");
+  return `<div class="weekly-chart"><div class="weekly-bars">${bars}</div></div>`;
 }
 
-function timeReport(repairs) {
-  const minutes = repairs.map((repair) => numberOrNull(repair.repairTime)).filter((value) => value != null);
-  const completed = repairs.filter((repair) => repair.dateReceivedLab && repair.dateOut).map((repair) => {
-    return (parseDate(repair.dateOut) - parseDate(repair.dateReceivedLab)) / 864e5;
-  }).filter((days) => days >= 0);
-  const monthly = monthGroups(repairs);
-  const finishedByMonth = monthGroups(repairs.filter((repair) => repair.status === "Completed"), () => 1, (repair) => repair.dateOut);
-  return `<div class="dashboard-metrics">
-      ${metric("Logged repair time", `${displayNumber(minutes.reduce((sum, value) => sum + value, 0) / 60, " h")}`, `${minutes.length} repairs with time recorded`)}
-      ${metric("Average repair time", displayNumber(average(minutes), " min"), "among records with time entered")}
-      ${metric("Average turnaround", displayNumber(average(completed), " days"), "received-to-completed calendar days")}
-    </div>
-    <div class="dashboard-report-grid">${chart("Repairs by month", monthly)}${chart("Completed repairs by month", finishedByMonth)}</div>`;
+function breakdown(title, entries) {
+  if (!entries.length) return `<section class="insights-panel breakdown-panel"><h2>${esc(title)}</h2><div class="insights-empty">No data yet.</div></section>`;
+  const max = Math.max(1, ...entries.map((entry) => entry.value));
+  const rows = entries.slice(0, 6).map((entry) => {
+    const width = Math.max(entry.value ? 2 : 0, entry.value / max * 100);
+    return `<div class="breakdown-row"><span title="${esc(entry.label)}">${esc(entry.label)}</span><div><i style="width:${width}%"></i></div><b>${esc(entry.value)}</b></div>`;
+  }).join("");
+  return `<section class="insights-panel breakdown-panel"><h2>${esc(title)}</h2><div class="breakdown-list">${rows}</div></section>`;
 }
 
-function costsReport(repairs) {
-  const recorded = repairs.map((repair) => ({ repair, cost: numberOrNull(repair.materialCost) })).filter((entry) => entry.cost != null);
-  const total = recorded.reduce((sum, entry) => sum + entry.cost, 0);
-  const monthly = monthGroups(recorded.map((entry) => entry.repair), (repair) => numberOrNull(repair.materialCost) || 0);
-  const byProduct = groupBy(recorded.map((entry) => entry.repair).filter((repair) => repair.productName), (repair) => repair.productName, (repair) => numberOrNull(repair.materialCost) || 0).slice(0, 8);
-  const byClass = groupBy(recorded.map((entry) => entry.repair), (repair) => repair.item, (repair) => numberOrNull(repair.materialCost) || 0).slice(0, 8);
-  const unrecorded = repairs.length - recorded.length;
-  return `<div class="dashboard-metrics">
-      ${metric("Recorded material cost", currency(total), "not a full operating-cost or revenue figure")}
-      ${metric("Repairs with cost", recorded.length, "cost entered")}
-      ${metric("No cost recorded", unrecorded, "blank cost is excluded from totals")}
-    </div>
-    <div class="dashboard-report-grid">${chart("Material cost by month", monthly, currency)}${chart("Recorded material cost by product", byProduct, currency)}${chart("Recorded material cost by repair class", byClass, currency)}</div>`;
+function warrantyLabel(item) {
+  if (item === "CA11002" || /\bwarranty\b/i.test(item) && !/non[- ]warranty/i.test(item)) return "Warranty";
+  if (item === "CA11001" || /^CA11001\./.test(item) || /non[- ]warranty/i.test(item)) return "Non-warranty";
+  return "Not recorded";
 }
 
-function mixReport(repairs) {
-  const classes = groupBy(repairs, (repair) => repair.item).slice(0, 10);
-  const categories = groupBy(repairs, (repair) => repair.category).slice(0, 10);
-  const products = groupBy(repairs.filter((repair) => repair.productName), (repair) => repair.productName).slice(0, 10);
-  return `<div class="dashboard-report-grid dashboard-report-grid-three">${chart("Repair class", classes)}${chart("Product category", categories)}${chart("Product", products)}</div>`;
+function needsAttention() {
+  return state.repairs
+    .filter((repair) => repair.status === "Ready for Pickup" && ["Unpaid", "Partial"].includes(repair.paymentStatus))
+    .sort((a, b) => (parseDate(a.dateOut)?.getTime() || 0) - (parseDate(b.dateOut)?.getTime() || 0))
+    .slice(0, 5);
 }
-
-const reports = {
-  overview: ["Overview", overview],
-  time: ["Time", timeReport],
-  costs: ["Costs", costsReport],
-  mix: ["Repair mix", mixReport],
-};
 
 function exportCsv(repairs) {
   const columns = [
@@ -138,32 +125,46 @@ function exportCsv(repairs) {
 }
 
 export function renderDashboard() {
-  const repairs = repairsInPeriod();
-  const [title, renderReport] = reports[report];
+  const repairs = completedInPeriod();
+  const turnaround = repairs.map((repair) => {
+    const received = parseDate(repair.dateReceivedLab || repair.orderCreated);
+    const completed = parseDate(repair.dateOut);
+    return received && completed ? (completed - received) / 864e5 : null;
+  }).filter((days) => days != null && days >= 0);
+  const repairTimes = repairs.map((repair) => numberOrNull(repair.repairTime)).filter((value) => value != null);
+  const materials = repairs.map((repair) => numberOrNull(repair.materialCost)).filter((value) => value != null);
+  const categories = groupBy(repairs, (repair) => repair.category).slice(0, 6);
+  const products = groupBy(repairs.filter((repair) => repair.productName), (repair) => repair.productName).slice(0, 6);
+  const warranty = groupBy(repairs, (repair) => warrantyLabel(repair.item));
+  const attention = needsAttention();
+  const periodButtons = [["30d", "30 days"], ["90d", "90 days"], ["all", "All time"]];
   $("content").innerHTML = `
-    <div class="dashboard-toolbar">
-      <div><h1>Dashboard</h1><p class="muted">${repairs.length} repairs · dates use lab received date, then order date</p></div>
-      <div class="dashboard-actions">
-        <label class="dashboard-period-label" for="dashboard-period">Period</label>
-        <select id="dashboard-period">
-          <option value="30d" ${period === "30d" ? "selected" : ""}>Last 30 days</option>
-          <option value="90d" ${period === "90d" ? "selected" : ""}>Last 90 days</option>
-          <option value="365d" ${period === "365d" ? "selected" : ""}>Last 12 months</option>
-          <option value="year" ${period === "year" ? "selected" : ""}>Year to date</option>
-          <option value="all" ${period === "all" ? "selected" : ""}>All records</option>
-        </select>
-        <button id="dashboard-export" class="ghost" type="button">Export CSV</button>
+    <section class="insights-page">
+      <div class="insights-controls">
+        <div class="segmented insights-period" role="group" aria-label="Insights period">
+          ${periodButtons.map(([key, label]) => `<button type="button" data-period="${key}" aria-pressed="${period === key}" class="${period === key ? "active" : ""}">${label}</button>`).join("")}
+        </div>
+        <button id="dashboard-export" class="insights-export" type="button" title="Export report as CSV">Export CSV</button>
       </div>
-    </div>
-    <div class="segmented dashboard-tabs" role="tablist" aria-label="Dashboard reports">
-      ${Object.entries(reports).map(([key, [label]]) => `<button type="button" role="tab" data-report="${key}" aria-selected="${report === key}" class="${report === key ? "active" : ""}">${label}</button>`).join("")}
-    </div>
-    <div class="dashboard-report" aria-label="${esc(title)} report">${renderReport(repairs)}</div>
-    <p class="dashboard-note">Date ranges exclude records without a usable received, order, or completion date. Costs show entered raw material cost only.</p>`;
+      <div class="insights-metrics">
+        ${metric("Repairs completed", repairs.length)}
+        ${metric("Average days to complete", average(turnaround) == null ? "—" : average(turnaround).toFixed(1))}
+        ${metric("Average repair time", average(repairTimes) == null ? "—" : Math.round(average(repairTimes)), "min")}
+        ${metric("Materials cost", currency(materials.reduce((sum, value) => sum + value, 0)))}
+      </div>
+      <div class="insights-primary-grid">
+        <section class="insights-panel weekly-panel"><h2>Completed per week</h2>${weeklyChart(weeklyTotals(repairs))}</section>
+        <section class="insights-panel attention-panel"><h2>Needs attention</h2>${attention.length ? `<div class="attention-list">${attention.map((repair) => `<div class="attention-row"><strong>${esc(repair.productName || "Product not set")}</strong><span>Ready, but still unpaid</span></div>`).join("")}</div>` : `<div class="insights-empty">Nothing needs attention.</div>`}</section>
+      </div>
+      <div class="insights-breakdown-grid">
+        ${breakdown("By category", categories)}
+        ${breakdown("Most repaired", products)}
+        ${breakdown("Warranty or not", warranty)}
+      </div>
+    </section>`;
 
-  $("dashboard-period").onchange = (event) => { period = event.target.value; renderDashboard(); };
-  $("dashboard-export").onclick = () => exportCsv(repairs);
-  $("content").querySelectorAll("[data-report]").forEach((button) => {
-    button.onclick = () => { report = button.dataset.report; renderDashboard(); };
+  $("content").querySelectorAll("[data-period]").forEach((button) => {
+    button.onclick = () => { period = button.dataset.period; renderDashboard(); };
   });
+  $("dashboard-export").onclick = () => exportCsv(repairsForExport());
 }

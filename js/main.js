@@ -23,6 +23,7 @@ function setView(view) {
   $("view-admin").textContent = "Settings";
   const isDashboard = view === "dashboard";
   const isAdmin = view === "admin";
+  document.body.classList.toggle("dashboard-active", isDashboard);
   $("search").hidden = isDashboard || isAdmin;
   $("add-repair").hidden = isAdmin;
   $("force-sync").hidden = isAdmin;

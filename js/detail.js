@@ -82,7 +82,10 @@ const drawerInfoBlock = (r, isNew, fromCin7) => `
 
   <section class="drawer-section lab-section">
     <h3>Lab</h3>
-    <div class="drawer-field drawer-field-wide"><label>What needs doing</label><textarea id="f-description" placeholder="e.g. Replace zip">${esc(r.description)}</textarea>${r.cin7Comments ? `<button type="button" class="ghost small" id="copy-cin7">Copy from Cin7</button>` : ""}</div>
+    <div class="drawer-field drawer-field-wide">
+      <div class="drawer-field-head"><label for="f-description">What needs doing</label>${r.cin7Comments ? `<button type="button" class="copy-cin7" id="copy-cin7">Copy from Cin7</button>` : ""}</div>
+      <textarea id="f-description" placeholder="e.g. Replace zip">${esc(r.description)}</textarea>
+    </div>
     <div class="drawer-order-grid drawer-lab-numbers">
       <div class="drawer-field"><label>Time (min)</label><input id="f-time" type="number" min="0" placeholder="0" value="${r.repairTime ?? ""}"></div>
       <div class="drawer-field"><label>Materials ($)</label><input id="f-cost" type="number" min="0" step="0.01" placeholder="0.00" value="${r.materialCost ?? ""}"></div>
@@ -92,13 +95,15 @@ const drawerInfoBlock = (r, isNew, fromCin7) => `
       <div class="drawer-field"><label>Date completed</label><input id="f-out" type="date" value="${esc(r.dateOut || "")}"></div>
     </div>
     <div class="drawer-field drawer-field-wide drawer-comment"><label>Add a note</label><textarea id="f-comment" placeholder="Saved with the repair"></textarea></div>
-    ${isNew ? "" : `<div class="drawer-activity"><h3>Activity</h3><div id="history"></div></div>`}
+    ${isNew ? "" : `<div class="drawer-activity"><div class="drawer-activity-head"><h3>Activity</h3><button type="button" class="activity-toggle" id="activity-toggle" aria-expanded="false">View activity</button></div><div id="history" hidden></div></div>`}
   </section>
 `;
 
 const productBox = (r) => `
-  <div class="product-row"><input id="f-product" autocomplete="off" placeholder="Type a name or SKU…" value="${esc(r.productName)}"><button type="button" class="ghost" id="f-product-clear">Clear</button></div>
-  <div class="product-results" id="product-results"></div>`;
+  <div class="product-picker">
+    <div class="product-row"><input id="f-product" role="combobox" aria-autocomplete="list" aria-controls="product-results" aria-expanded="false" autocomplete="off" placeholder="Type a name or SKU…" value="${esc(r.productName)}"><button type="button" class="product-clear" id="f-product-clear" aria-label="Clear product" title="Clear product">×</button></div>
+    <div class="product-results" id="product-results" role="listbox" hidden></div>
+  </div>`;
 
 const collectRepairValues = (fromCin7, picker) => {
   const values = {
@@ -233,16 +238,18 @@ function setupProductPicker(r, categoryPicker) {
       picked.code = ""; picked.name = ""; pendingProduct = null;
       categoryPicker.clear();
     }
-    results.style.display = "none";
-    if (text.length < 2) { results.style.display = "none"; return; }
+    results.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    if (text.length < 2) return;
     timer = setTimeout(async () => {
       try {
         const products = await searchProducts(text);
         results.innerHTML = products.length
-          ? products.map((p) => `<div data-code="${esc(p.code)}" data-label="${esc(p.label)}" data-category="${esc(p.category)}">${esc(p.label)} <span class="muted">(${esc(p.code)})</span></div>`).join("")
-          : `<button type="button" class="product-add" data-add-new="${esc(text)}">+ Add new “${esc(text)}”</button>`;
-      } catch (err) { results.innerHTML = `<div>${esc(err.message)}</div>`; }
-      results.style.display = "block";
+          ? products.map((p) => `<button type="button" class="product-result" role="option" data-code="${esc(p.code)}" data-label="${esc(p.label)}" data-category="${esc(p.category)}"><span class="product-result-name">${esc(p.label)}</span><span class="product-result-category">${esc(p.category || "")}</span></button>`).join("")
+          : `<button type="button" class="product-result product-add" role="option" data-add-new="${esc(text)}"><span class="product-result-name">Use “${esc(text)}” as a custom product</span></button>`;
+      } catch (err) { results.innerHTML = `<div class="product-result-message">${esc(err.message)}</div>`; }
+      results.hidden = false;
+      input.setAttribute("aria-expanded", "true");
     }, 250);
   };
   results.onclick = (e) => {
@@ -254,7 +261,8 @@ function setupProductPicker(r, categoryPicker) {
       picked.code = code; picked.name = name;
       input.value = name;
       categoryPicker.clear();
-      results.style.display = "none";
+      results.hidden = true;
+      input.setAttribute("aria-expanded", "false");
       return;
     }
     const item = e.target.closest("[data-code]");
@@ -263,14 +271,16 @@ function setupProductPicker(r, categoryPicker) {
     picked.code = item.dataset.code;
     picked.name = item.dataset.label;
     input.value = picked.name;
-    results.style.display = "none";
+    results.hidden = true;
+    input.setAttribute("aria-expanded", "false");
     if (item.dataset.category) categoryPicker.select(item.dataset.category, true);
     else categoryPicker.clear();
   };
   $("f-product-clear").onclick = () => {
     const clearCategory = categoryPicker.disabled || pendingProduct;
     pendingProduct = null;
-    picked.code = ""; picked.name = ""; input.value = ""; results.style.display = "none";
+    picked.code = ""; picked.name = ""; input.value = ""; results.hidden = true;
+    input.setAttribute("aria-expanded", "false");
     if (clearCategory) categoryPicker.clear();
   };
   return { picked, get pendingProduct() { return pendingProduct; }, hasUnpickedText: () => input.value.trim() !== "" && input.value !== picked.name };
@@ -321,6 +331,15 @@ export function openRepair(repair) {
     $("copy-cin7").onclick = () => {
       const box = $("f-description");
       box.value = box.value ? box.value + "\n" + r.cin7Comments : r.cin7Comments;
+    };
+  }
+  if (!isNew) {
+    $("activity-toggle").onclick = () => {
+      const history = $("history");
+      history.hidden = !history.hidden;
+      const expanded = !history.hidden;
+      $("activity-toggle").textContent = expanded ? "Hide activity" : "View activity";
+      $("activity-toggle").setAttribute("aria-expanded", String(expanded));
     };
   }
   refreshHistory();
