@@ -94,7 +94,7 @@ $("force-sync").onclick = async () => {
   showBanner("Syncing with Cin7 — this can take a few seconds…");
   try {
     const result = await forceSync();
-    showBanner(`Synced. Orders added: ${result.orders?.added ?? 0}, updated: ${result.orders?.updated ?? 0}. Products saved: ${result.products?.productsSaved ?? 0}.`);
+    showBanner(`Synced. Orders added: ${result.orders?.added ?? 0}, updated: ${result.orders?.updated ?? 0}. Products saved: ${result.products?.productsSaved ?? 0}. Payment statuses updated: ${result.payments?.updated ?? 0}${result.payments?.invalidKeys ? `; ${result.payments.invalidKeys} repairs skipped (invalid Cin7 order ID)` : ""}${result.payments?.finished === false ? "; payment sync continues next run" : ""}.`);
   } catch (err) {
     showBanner(formatSyncError(err));
   } finally {

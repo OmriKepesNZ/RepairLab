@@ -46,7 +46,7 @@ const renderRepairModal = (r, isNew, fromCin7) => `
     <h3>Lab</h3>
     <div class="grid">
       ${field("Status", `<select id="f-status">${options(STATUSES, r.status)}</select>`) }
-      ${field("Payment", `<select id="f-payment">${options(PAYMENTS, r.paymentStatus)}</select>`) }
+      ${field(fromCin7 ? "Payment (Cin7)" : "Payment", `<select id="f-payment" ${fromCin7 ? 'disabled title="Synced from Cin7; cannot be edited here"' : ""}>${options(PAYMENTS, r.paymentStatus)}</select>`) }
       ${field("Product (search Cin7 products)", productBox(r))}
       ${field("Category", categoryBox(r))}
       ${field("Received in lab", `<input id="f-lab" type="date" value="${r.dateReceivedLab || ""}">`) }
@@ -70,7 +70,6 @@ const collectRepairValues = (fromCin7, picker) => {
     productCode: picker.picked.code,
     productName: picker.picked.name,
     category: $("f-category").value.trim(),
-    paymentStatus: $("f-payment").value,
     description: $("f-description").value.trim(),
     repairTime: numberOrBlank($("f-time").value),
     materialCost: numberOrBlank($("f-cost").value),
@@ -83,6 +82,7 @@ const collectRepairValues = (fromCin7, picker) => {
       orderCreated: $("f-created").value,
       item: $("f-class").value.trim(),
       qty: Number($("f-qty").value) || 1,
+      paymentStatus: $("f-payment").value,
     });
   }
   return values;
@@ -253,7 +253,7 @@ export function openRepair(repair) {
     <h3>Lab</h3>
     <div class="grid">
       ${field("Status", `<select id="f-status">${options(STATUSES, r.status)}</select>`)}
-      ${field("Payment", `<select id="f-payment">${options(PAYMENTS, r.paymentStatus)}</select>`)}
+      ${field(fromCin7 ? "Payment (Cin7)" : "Payment", `<select id="f-payment" ${fromCin7 ? 'disabled title="Synced from Cin7; cannot be edited here"' : ""}>${options(PAYMENTS, r.paymentStatus)}</select>`)}
       ${field("Product (search Cin7 products)", productBox(r))}
       ${field("Category", categoryBox(r))}
       ${field("Received in lab", `<input id="f-lab" type="date" value="${r.dateReceivedLab || ""}">`)}

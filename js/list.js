@@ -72,8 +72,8 @@ function archiveHtml() {
 export function renderRepairs() {
   $("content").innerHTML = (state.view === "list" ? listHtml() : boardHtml()) + archiveHtml();
   const open = state.repairs.filter((r) => r.status !== "Completed").length;
-  const unpaid = state.repairs.filter((r) => r.paymentStatus === "Unpaid").length;
-  $("summary").textContent = `${state.repairs.length} repairs · ${open} open · ${unpaid} unpaid`;
+  const outstanding = state.repairs.filter((r) => r.paymentStatus === "Unpaid" || r.paymentStatus === "Partial").length;
+  $("summary").textContent = `${state.repairs.length} repairs · ${open} open · ${outstanding} unpaid or partial`;
 }
 
 // One-time wiring: clicks and drag-and-drop are handled on the container so they survive re-rendering.

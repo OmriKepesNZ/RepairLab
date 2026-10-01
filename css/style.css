@@ -135,6 +135,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .pill.ready { background: #e2ecdf; color: var(--accent); }
 .pill.done, .pill.waived { background: var(--chip); color: var(--muted); }
 .pill.unpaid { background: #f5ddd7; color: var(--danger); }
+.pill.partial { background: #f2e7cf; color: #785500; }
 .pill.paid { background: #e2ecdf; color: var(--accent); }
 
 /* repair detail */

@@ -194,6 +194,14 @@ export async function forceSync() {
     if (step?.error) throw new Error(step.error.message || step.error);
     products = step?.data ?? step;
   }
+  let payments = await invokeEdgeFunction("cin7-payment-sync", { job: "payments", restart: true });
+  let paymentUpdates = payments?.updated ?? 0;
+  let invalidPaymentLinks = payments?.invalidKeys ?? 0;
+  for (let guard = 0; payments?.finished === false && guard < 12; guard++) {
+    payments = await invokeEdgeFunction("cin7-payment-sync", { job: "payments" });
+    paymentUpdates += payments?.updated ?? 0;
+    invalidPaymentLinks += payments?.invalidKeys ?? 0;
+  }
   await loadRepairs();
-  return { orders: result?.orders, products };
+  return { orders: result?.orders, products, payments: { ...payments, updated: paymentUpdates, invalidKeys: invalidPaymentLinks } };
 }

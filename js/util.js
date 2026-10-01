@@ -9,9 +9,9 @@ export const fmtDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateS
 export const fmtDateTime = (iso) => new Date(iso).toLocaleString("en-NZ", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 
 export const STATUSES = ["Created in Cin7", "In Lab", "In Progress", "Ready for Pickup", "Completed"];
-export const PAYMENTS = ["Unpaid", "Paid", "Waived"];
+export const PAYMENTS = ["Unpaid", "Partial", "Paid", "Waived"];
 const STATUS_CLASS = { "Created in Cin7": "cin7", "In Lab": "in-lab", "In Progress": "prog", "Ready for Pickup": "ready", Completed: "done" };
-const PAYMENT_CLASS = { Unpaid: "unpaid", Paid: "paid", Waived: "waived" };
+const PAYMENT_CLASS = { Unpaid: "unpaid", Partial: "partial", Paid: "paid", Waived: "waived" };
 export const statusPill = (status) => `<span class="pill ${STATUS_CLASS[status] || ""}">${esc(status)}</span>`;
 export const paymentPill = (payment) => `<span class="pill ${PAYMENT_CLASS[payment] || ""}">${esc(payment)}</span>`;
 
