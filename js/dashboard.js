@@ -4,6 +4,12 @@ import { state } from "./data.js";
 let period = "90d";
 const parseDate = (value) => value ? new Date(`${value.slice(0, 10)}T00:00:00Z`) : null;
 const dateFor = (repair) => repair.dateReceivedLab || repair.orderCreated || repair.dateOut || "";
+const closedDate = (repair) => {
+  const closeEvent = (repair.events || [])
+    .filter((event) => event.type === "event" && event.text.includes("→ Completed"))
+    .sort((a, b) => b.at.localeCompare(a.at))[0];
+  return closeEvent?.at?.slice(0, 10) || repair.dateOut || "";
+};
 const numberOrNull = (value) => value === "" || value == null || !Number.isFinite(Number(value)) ? null : Number(value);
 const currency = (value) => new Intl.NumberFormat("en-NZ", { style: "currency", currency: "NZD", currencyDisplay: "narrowSymbol", maximumFractionDigits: 0 }).format(value);
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
@@ -17,8 +23,8 @@ function completedInPeriod() {
   const end = today();
   const start = period === "all" ? null : new Date(end.getTime() - (Number.parseInt(period, 10) - 1) * 864e5);
   return state.repairs.filter((repair) => {
-    const date = parseDate(repair.dateOut);
-    return date && (!start || date >= start) && date <= end;
+    const date = parseDate(closedDate(repair));
+    return repair.status === "Completed" && date && (!start || date >= start) && date <= end;
   });
 }
 
@@ -112,7 +118,8 @@ function needsAttention() {
 function exportCsv(repairs) {
   const columns = [
     ["Invoice", "invoiceNumber"], ["Customer", "customerName"], ["Report date", dateFor],
-    ["Status", "status"], ["Payment", "paymentStatus"], ["Class", "item"], ["Product", "productName"],
+    ["Status", "status"], ["Order state", (repair) => repair.status === "Completed" ? "Closed" : "Active"],
+    ["Payment", "paymentStatus"], ["Class", "item"], ["Product", "productName"],
     ["Category", "category"], ["Quantity", "qty"], ["Repair minutes", "repairTime"], ["Material cost", "materialCost"],
   ];
   const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
@@ -126,9 +133,10 @@ function exportCsv(repairs) {
 
 export function renderDashboard() {
   const repairs = completedInPeriod();
+  const activeCount = state.repairs.filter((repair) => repair.status !== "Completed").length;
   const turnaround = repairs.map((repair) => {
     const received = parseDate(repair.dateReceivedLab || repair.orderCreated);
-    const completed = parseDate(repair.dateOut);
+    const completed = parseDate(closedDate(repair));
     return received && completed ? (completed - received) / 864e5 : null;
   }).filter((days) => days != null && days >= 0);
   const repairTimes = repairs.map((repair) => numberOrNull(repair.repairTime)).filter((value) => value != null);
@@ -147,7 +155,8 @@ export function renderDashboard() {
         <button id="dashboard-export" class="insights-export" type="button" title="Export report as CSV">Export CSV</button>
       </div>
       <div class="insights-metrics">
-        ${metric("Repairs completed", repairs.length)}
+        ${metric("Currently active", activeCount)}
+        ${metric("Orders closed", repairs.length)}
         ${metric("Average days to complete", average(turnaround) == null ? "—" : average(turnaround).toFixed(1))}
         ${metric("Average repair time", average(repairTimes) == null ? "—" : Math.round(average(repairTimes)), "min")}
         ${metric("Materials cost", currency(materials.reduce((sum, value) => sum + value, 0)))}

@@ -14,10 +14,11 @@ function matchingRepairs() {
 }
 
 const filterMatches = (repair) => {
-  if (listFilter === "open") return repair.status !== "Completed";
+  if (listFilter === "archived") return repair.status === "Completed";
+  if (repair.status === "Completed") return false;
+  if (listFilter === "open") return true;
   if (listFilter === "unpaid") return repair.paymentStatus === "Unpaid" || repair.paymentStatus === "Partial";
   if (listFilter === "warranty") return repair.item === "CA11002" || /\bwarranty\b/i.test(repair.item) && !/non[- ]warranty/i.test(repair.item);
-  if (listFilter === "archived") return repair.status === "Completed";
   return true;
 };
 
@@ -104,9 +105,9 @@ function archiveHtml() {
 export function renderRepairs() {
   $("content").innerHTML = state.view === "list" ? listHtml() : boardHtml() + archiveHtml();
   const open = state.repairs.filter((r) => r.status !== "Completed").length;
-  const outstanding = state.repairs.filter((r) => r.paymentStatus === "Unpaid" || r.paymentStatus === "Partial").length;
+  const outstanding = state.repairs.filter((r) => r.status !== "Completed" && (r.paymentStatus === "Unpaid" || r.paymentStatus === "Partial")).length;
   const late = state.repairs.filter((repair) => isOverdue(repair)).length;
-  const urgent = state.repairs.filter((repair) => repair.isUrgent).length;
+  const urgent = state.repairs.filter((repair) => repair.status !== "Completed" && repair.isUrgent).length;
   $("summary").innerHTML = `<div><strong>${open}</strong><span>in the lab</span></div><div><strong class="warn">${late}</strong><span>waiting over ${waitingThreshold()} days</span></div><div><strong>${outstanding}</strong><span>unpaid</span></div><div><strong>${urgent}</strong><span>urgent orders</span></div>`;
 }
 
