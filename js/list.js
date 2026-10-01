@@ -72,8 +72,8 @@ function repairCard(repair) {
   const age = ageDays === 0 ? "Today" : ageDays === 1 ? "1 day" : `${ageDays} days`;
   const ageClass = isOverdue(repair, ageDays) ? "late-text is-late" : "late-text";
   return `
-    <div class="card" draggable="true" data-id="${repair.id}" tabindex="0" role="button" aria-label="Open repair ${esc(repair.invoiceNumber)}">
-      <div class="card-title">${productText}</div>
+    <div class="card${repair.isUrgent ? " is-urgent" : ""}" draggable="true" data-id="${repair.id}" tabindex="0" role="button" aria-label="Open repair ${esc(repair.invoiceNumber)}${repair.isUrgent ? ", urgent" : ""}">
+      <div class="card-title-row"><div class="card-title">${productText}</div>${repair.isUrgent ? `<span class="urgent-badge">Urgent</span>` : ""}</div>
       <div class="card-subtitle">${customerText}</div>
       <div class="card-footer">
         <span class="${paymentDot}">${repair.paymentStatus === "Paid" ? "Paid" : "Unpaid"}</span>
@@ -85,7 +85,7 @@ function repairCard(repair) {
 function boardHtml() {
   const repairs = matchingRepairs();
   const columns = STATUSES.filter((status) => status !== "Completed").map((status) => {
-    const statusRepairs = repairs.filter((r) => r.status === status);
+    const statusRepairs = repairs.filter((r) => r.status === status).sort((a, b) => Number(Boolean(b.isUrgent)) - Number(Boolean(a.isUrgent)) || waitingDays(b) - waitingDays(a));
     return `<div class="col" data-status="${status}"><div class="col-head"><span>${displayStatus(status)}</span><span>${statusRepairs.length}</span></div><div class="col-body">${statusRepairs.map(repairCard).join("") || '<div class="empty">Nothing here</div>'}</div></div>`;
   });
   return `<div class="board">${columns.join("")}</div>`;

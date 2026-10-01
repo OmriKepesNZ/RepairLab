@@ -12,7 +12,7 @@ const COLUMNS = {
   dateReceivedLab: "date_received_lab", dateOut: "date_out", item: "item", qty: "qty", category: "category",
   description: "description", status: "status", paymentStatus: "payment_status", repairTime: "repair_time",
   materialCost: "material_cost", productCode: "product_code", productName: "product_name",
-  cin7Comments: "cin7_comments", cin7Key: "cin7_key",
+  cin7Comments: "cin7_comments", cin7Key: "cin7_key", isUrgent: "is_urgent",
 };
 
 const toRow = (fields) =>

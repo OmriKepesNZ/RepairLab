@@ -27,7 +27,7 @@ export const paymentPill = (payment) => `<span class="pill ${PAYMENT_CLASS[payme
 const LABELS = {
   invoiceNumber: "Invoice #", customerName: "Customer", orderCreated: "Order created", dateReceivedLab: "Received in lab",
   dateOut: "Date completed", item: "Class", qty: "Qty", category: "Category", description: "Description", status: "Status",
-  paymentStatus: "Payment", repairTime: "Repair time", materialCost: "Material cost", productName: "Product",
+  paymentStatus: "Payment", repairTime: "Repair time", materialCost: "Material cost", productName: "Product", isUrgent: "Urgent",
 };
 const DATE_FIELDS = ["orderCreated", "dateReceivedLab", "dateOut"];
 
@@ -37,6 +37,7 @@ export function describeChanges(before, changes) {
     const label = LABELS[key];
     if (!label) continue;
     if (key === "status" || key === "paymentStatus") detailed.push(`${label}: ${before[key] || "—"} → ${value}`);
+    else if (key === "isUrgent") detailed.push(`${label}: ${value ? "on" : "off"}`);
     else if (DATE_FIELDS.includes(key)) detailed.push(`${label}: ${value ? fmtDate(value) : "cleared"}`);
     else if (key === "productName") detailed.push(`${label}: ${value || "cleared"}`);
     else plain.push(label.toLowerCase());

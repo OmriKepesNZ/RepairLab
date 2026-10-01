@@ -213,6 +213,11 @@ header h1 {
 }
 .card:hover { transform: translateY(-1px); }
 .card.dragging { opacity: .4; }
+.card.is-urgent { border-color: rgba(214, 69, 61, .58); box-shadow: 0 0 0 1px rgba(214, 69, 61, .12), var(--shadow); }
+.card.is-urgent:hover { border-color: var(--red); }
+.card-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.card-title-row .card-title { min-width: 0; }
+.urgent-badge { flex: 0 0 auto; padding: 3px 8px; border-radius: 999px; background: #fbe5e3; color: var(--red); font-size: 11px; font-weight: 600; line-height: 1.2; }
 .card-title {
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -926,6 +931,26 @@ textarea { min-height: 70px; resize: vertical; }
 }
 .drawer-action-delete { color: var(--red); }
 .drawer-action-save { min-width: 88px; border-radius: 999px; }
+.urgent-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.urgent-setting > div { display: flex; flex-direction: column; gap: 3px; }
+.urgent-setting strong { color: var(--ink); font-size: 14px; font-weight: 600; }
+.urgent-setting > div > span { color: var(--ink2); font-size: 12px; }
+.urgent-toggle { position: relative; flex: 0 0 48px; width: 48px; height: 28px; cursor: pointer; }
+.urgent-toggle input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.urgent-switch { position: absolute; inset: 0; border-radius: 999px; background: #c7c7cc; transition: background-color .18s ease; }
+.urgent-switch::after { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: white; box-shadow: 0 1px 3px rgba(0,0,0,.2); content: ""; transition: transform .18s ease; }
+.urgent-toggle input:checked + .urgent-switch { background: var(--red); }
+.urgent-toggle input:checked + .urgent-switch::after { transform: translateX(20px); }
+.urgent-toggle input:focus-visible + .urgent-switch { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 .pill {
   min-height: 22px;

@@ -42,6 +42,11 @@ const drawerInfoBlock = (r, isNew, fromCin7) => `
 
   ${drawerStatusRow(r)}
 
+  <div class="urgent-setting">
+    <div><strong>Mark as urgent</strong><span>Pins it to the top of its column</span></div>
+    <label class="urgent-toggle" aria-label="Mark this repair as urgent"><input id="f-urgent" type="checkbox" ${r.isUrgent ? "checked" : ""}><span class="urgent-switch"></span></label>
+  </div>
+
   <div class="drawer-meta-grid">
     <div class="drawer-field">
       <label>Product</label>
@@ -108,6 +113,7 @@ const productBox = (r) => `
 const collectRepairValues = (fromCin7, picker) => {
   const values = {
     status: $("f-status").value,
+    isUrgent: $("f-urgent").checked,
     dateReceivedLab: $("f-lab").value,
     productCode: picker.picked.code,
     productName: picker.picked.name,
