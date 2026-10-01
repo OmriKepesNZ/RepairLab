@@ -48,7 +48,7 @@ function tableHtml(repairs, emptyMessage = "No repairs to show.") {
       <td>${esc(r.customerName || "—")}</td>
       <td>${statusPill(r.status)}</td>
       <td>${esc(repairClass(r.item))}</td>
-      <td><span class="list-payment ${r.paymentStatus === "Paid" ? "is-paid" : r.paymentStatus === "Partial" ? "is-partial" : "is-unpaid"}">${esc(r.paymentStatus || "Unpaid")}</span></td>
+      <td><span class="list-payment ${["Paid", "Waived"].includes(r.paymentStatus) ? "is-paid" : r.paymentStatus === "Partial" ? "is-partial" : "is-unpaid"}">${esc(r.paymentStatus || "Unpaid")}</span></td>
       <td>${waitingDays(r)} days total</td>
       <td>${r.repairTime === "" || r.repairTime == null ? "—" : `${esc(r.repairTime)} min`}</td>
       <td>${formatMoney(r.materialCost)}</td>
