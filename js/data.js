@@ -124,6 +124,24 @@ export async function listCustomProducts() {
   return data;
 }
 
+export async function loadCin7RepairCodes() {
+  const { data, error } = await db.from("cin7_settings").select("repair_codes").eq("singleton", true).maybeSingle();
+  if (error) throw error;
+  return data?.repair_codes ?? ["CA11001", "CA11002"];
+}
+
+export async function saveCin7RepairCodes(codes) {
+  const repairCodes = [...new Set(codes.map((code) => code.trim().toUpperCase()).filter(Boolean))];
+  const { data, error } = await db.from("cin7_settings")
+    .update({ repair_codes: repairCodes, updated_at: new Date().toISOString() })
+    .eq("singleton", true)
+    .select("repair_codes")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Cin7 settings were not found. Apply the latest database migration first.");
+  return data.repair_codes;
+}
+
 export async function updateCustomProduct(code, label, category) {
   const { data, error } = await db.from("products").update({ label, category }).eq("code", code).select("code").maybeSingle();
   if (error) throw error;
@@ -183,6 +201,11 @@ export async function listAdminUsers() {
 
 export async function createAdminUser(user) {
   const result = await invokeEdgeFunction("admin-users", { action: "create", ...user });
+  return result.user;
+}
+
+export async function updateAdminUserRole(userId, role) {
+  const result = await invokeEdgeFunction("admin-users", { action: "role", userId, role });
   return result.user;
 }
 

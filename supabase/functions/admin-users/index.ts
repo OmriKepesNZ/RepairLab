@@ -80,5 +80,37 @@ Deno.serve(async (req) => {
     return json({ user: { id: created.user.id, email, name, role } }, 201);
   }
 
+  if (body.action === "role") {
+    const userId = typeof body.userId === "string" ? body.userId : "";
+    const role = body.role === "admin" || body.role === "staff" ? body.role : "";
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId) || !role) {
+      return json({ error: "A valid user and access level are required." }, 400);
+    }
+    if (userId === authData.user.id && role !== "admin") {
+      return json({ error: "You cannot remove your own administrator access." }, 409);
+    }
+
+    const { data: currentRole, error: currentRoleError } = await service
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (currentRoleError) return json({ error: "Could not verify the current access level." }, 500);
+    if (currentRole?.role === "admin" && role === "staff") {
+      const { count, error: countError } = await service
+        .from("user_roles")
+        .select("user_id", { count: "exact", head: true })
+        .eq("role", "admin");
+      if (countError) return json({ error: "Could not verify the administrator count." }, 500);
+      if ((count ?? 0) <= 1) return json({ error: "The last administrator cannot be changed to Staff." }, 409);
+    }
+
+    const { error: updateError } = await service
+      .from("user_roles")
+      .upsert({ user_id: userId, role }, { onConflict: "user_id" });
+    if (updateError) return json({ error: "Could not update the access level." }, 500);
+    return json({ user: { id: userId, role } });
+  }
+
   return json({ error: "Unknown admin action." }, 400);
 });

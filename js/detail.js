@@ -13,7 +13,7 @@ const orderClassLabel = (value) => value === "CA11002" ? "Warranty repair" : /^C
 const statusButtons = (current) => [...STATUSES.slice(0, 4), ...(current === "Completed" ? ["Completed"] : [])].map((value) => `<button type="button" class="status-option${current === value ? " active" : ""}" data-status="${esc(value)}">${esc(statusLabel(value))}</button>`).join("");
 const categoryBox = (r) => `
   <div class="category-picker">
-    <div class="category-input-row"><input id="f-category" autocomplete="off" aria-autocomplete="list" aria-controls="category-options" aria-expanded="false" placeholder="Search categories…" value="${esc(r.category)}"><button type="button" class="ghost category-toggle" id="f-category-toggle" aria-label="Show categories" title="Show categories" aria-expanded="false">▾</button></div>
+    <div class="category-input-row"><input id="f-category" autocomplete="off" aria-autocomplete="list" aria-controls="category-options" aria-expanded="false" placeholder="${r.productCode ? "Search categories…" : "Select a product first"}" value="${esc(r.category)}" ${r.productCode ? "" : "disabled"}><button type="button" class="ghost category-toggle" id="f-category-toggle" aria-label="Show categories" title="Show categories" aria-expanded="false">▾</button></div>
     <div class="category-options" id="category-options" role="listbox" hidden></div>
   </div>`;
 
@@ -171,8 +171,12 @@ const saveRepairFromForm = async (r, isNew, fromCin7, picker, categoryPicker, ca
 function setupCategoryPicker(r, getCategories) {
   const input = $("f-category"), toggle = $("f-category-toggle"), menu = $("category-options");
   const selected = { value: input.value };
-  input.disabled = Boolean(r.productCode && r.category);
-  toggle.disabled = input.disabled;
+  const setEnabled = (enabled) => {
+    input.disabled = !enabled;
+    toggle.disabled = !enabled;
+    input.placeholder = enabled ? "Search categories…" : "Select a product first";
+  };
+  setEnabled(Boolean(r.productCode && !r.category));
 
   const close = () => {
     menu.hidden = true;
@@ -205,11 +209,10 @@ function setupCategoryPicker(r, getCategories) {
   };
 
   return {
-    clear() {
-      input.disabled = false;
-      toggle.disabled = false;
+    clear(enabled = false) {
       input.value = "";
       selected.value = "";
+      setEnabled(enabled);
       close();
     },
     close,
@@ -218,8 +221,7 @@ function setupCategoryPicker(r, getCategories) {
     select(category, locked = false) {
       input.value = category;
       selected.value = category;
-      input.disabled = locked;
-      toggle.disabled = locked;
+      setEnabled(!locked);
       close();
     },
     get disabled() { return input.disabled; },
@@ -260,7 +262,7 @@ function setupProductPicker(r, categoryPicker) {
       pendingProduct = { code, name };
       picked.code = code; picked.name = name;
       input.value = name;
-      categoryPicker.clear();
+      categoryPicker.clear(true);
       results.hidden = true;
       input.setAttribute("aria-expanded", "false");
       return;
@@ -274,14 +276,13 @@ function setupProductPicker(r, categoryPicker) {
     results.hidden = true;
     input.setAttribute("aria-expanded", "false");
     if (item.dataset.category) categoryPicker.select(item.dataset.category, true);
-    else categoryPicker.clear();
+    else categoryPicker.clear(true);
   };
   $("f-product-clear").onclick = () => {
-    const clearCategory = categoryPicker.disabled || pendingProduct;
     pendingProduct = null;
     picked.code = ""; picked.name = ""; input.value = ""; results.hidden = true;
     input.setAttribute("aria-expanded", "false");
-    if (clearCategory) categoryPicker.clear();
+    categoryPicker.clear();
   };
   return { picked, get pendingProduct() { return pendingProduct; }, hasUnpickedText: () => input.value.trim() !== "" && input.value !== picked.name };
 }

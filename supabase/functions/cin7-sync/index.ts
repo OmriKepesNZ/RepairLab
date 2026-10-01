@@ -12,7 +12,9 @@
 //  - force: true also makes "orders" look further back and "products" restart from scratch.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const isRepair = (code: string) => code.startsWith("CA11001") || code === "CA11002";
+const DEFAULT_REPAIR_CODES = ["CA11001", "CA11002"];
+const isRepair = (code: string, repairCodes: string[]) =>
+  repairCodes.some((prefix) => code.toUpperCase().startsWith(prefix));
 const nzDate = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Pacific/Auckland" });
 const nm = (a?: string, b?: string) => [a, b].filter(Boolean).join(" ").trim();
 
@@ -41,21 +43,30 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const job = body?.job ?? "orders";
   const force = Boolean(body?.force);
+  const { data: settings, error: settingsError } = await sb
+    .from("cin7_settings")
+    .select("repair_codes")
+    .eq("singleton", true)
+    .maybeSingle();
+  if (settingsError) return json({ error: "Could not load Cin7 repair-code settings." }, 500);
+  const repairCodes = Array.isArray(settings?.repair_codes)
+    ? settings.repair_codes.filter((code: unknown) => typeof code === "string").map((code: string) => code.trim().toUpperCase()).filter(Boolean)
+    : DEFAULT_REPAIR_CODES;
 
   if (job === "all") {
     if (force) await sb.from("sync_state").update({ last_modified: null }).eq("id", 1);
-    const ordersRes = await syncOrders(sb, auth);
+    const ordersRes = await syncOrders(sb, auth, repairCodes);
     if (ordersRes.status !== 200) return ordersRes;
     if (force) await sb.from("sync_state").update({ products_page: 1, products_done: null }).eq("id", 2);
-    const productsRes = await syncProducts(sb, auth);
+    const productsRes = await syncProducts(sb, auth, repairCodes);
     if (productsRes.status !== 200) return productsRes;
     return json({ orders: await ordersRes.json(), products: await productsRes.json() });
   }
-  return job === "products" ? await syncProducts(sb, auth) : await syncOrders(sb, auth);
+  return job === "products" ? await syncProducts(sb, auth, repairCodes) : await syncOrders(sb, auth, repairCodes);
 });
 
 // deno-lint-ignore no-explicit-any
-async function syncOrders(sb: any, auth: string) {
+async function syncOrders(sb: any, auth: string, repairCodes: string[]) {
   const { data: st } = await sb.from("sync_state").select("last_modified").eq("id", 1).maybeSingle();
   const since = new Date(st?.last_modified ?? Date.now() - 30 * 864e5).toISOString().replace(/\.\d{3}Z$/, "Z");
   let newest = new Date(since).getTime(), added = 0, updated = 0;
@@ -79,7 +90,7 @@ async function syncOrders(sb: any, auth: string) {
 
       for (const [i, l] of (o.lineItems ?? []).entries()) {
         const code: string = l.code ?? "";
-        if (!isRepair(code)) continue;
+        if (!isRepair(code, repairCodes)) continue;
         if (!customer && noName.length < 3) noName.push({ ref: o.reference, memberId: o.memberId, firstName: o.firstName, lastName: o.lastName, company: o.company, deliveryFirstName: o.deliveryFirstName, billingFirstName: o.billingFirstName });
         const key = `${o.id}-${l.id ?? i}`;
 
@@ -120,7 +131,7 @@ async function syncOrders(sb: any, auth: string) {
 }
 
 // deno-lint-ignore no-explicit-any
-async function syncProducts(sb: any, auth: string) {
+async function syncProducts(sb: any, auth: string, repairCodes: string[]) {
   const { data: st } = await sb.from("sync_state").select("products_page, products_done").eq("id", 2).maybeSingle();
   const start = st?.products_page ?? 1;
   const doneAt = st?.products_done ? new Date(st.products_done).getTime() : 0;
@@ -137,7 +148,7 @@ async function syncProducts(sb: any, auth: string) {
       for (const o of p.productOptions ?? []) {
         if (o.status === "Disabled") continue;
         const code: string = o.productOptionCode ?? o.code ?? "";
-        if (!code || isRepair(code)) continue;
+        if (!code || isRepair(code, repairCodes)) continue;
         const opts = [o.option1, o.option2, o.option3].filter(Boolean).join(" / ");
         rows.push({ code, label: opts ? `${p.name} – ${opts}` : p.name, style_code: p.styleCode ?? null, category: p.category || null });
       }
