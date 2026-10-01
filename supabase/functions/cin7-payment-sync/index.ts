@@ -18,7 +18,7 @@ const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout
 type Repair = { id: string; cin7_key: string | null; payment_status: string | null };
 type RepairLink = { repair: Repair; lineRef: number };
 type SalesOrder = { id: number; total: number; isVoid: boolean; lineItems?: { id: number; code: string }[] };
-type Payment = { orderId: number; amount: number; direction: number; isAuthorized: boolean };
+type Payment = { id?: number; orderId: number; amount: number; direction?: number; orderType?: number | string | null };
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
       for (let page = 1; ; page++) {
         const result = await cin7Get<Payment[]>("Payments", {
           where: paymentWhere,
-          fields: "orderId,amount,direction,isAuthorized",
+          fields: "id,orderId,amount,direction,orderType",
           page: String(page),
           rows: String(PAGE_SIZE),
         });
@@ -140,12 +140,12 @@ Deno.serve(async (req) => {
     const orderById = new Map(orders.map((order) => [Number(order.id), order]));
     const netPaidByOrder = new Map<number, number>();
     for (const payment of payments) {
-      if (payment.isAuthorized !== true) continue;
-      const direction = Number(payment.direction);
-      if (direction !== 1 && direction !== -1) continue;
+      if (payment.orderType != null && String(payment.orderType) !== "SalesOrder") continue;
       const amount = Number(payment.amount);
       if (!Number.isFinite(amount)) continue;
-      netPaidByOrder.set(Number(payment.orderId), (netPaidByOrder.get(Number(payment.orderId)) ?? 0) + amount * direction);
+      const direction = Number(payment.direction);
+      const signedAmount = direction === 1 || direction === -1 ? Math.abs(amount) * direction : amount;
+      netPaidByOrder.set(Number(payment.orderId), (netPaidByOrder.get(Number(payment.orderId)) ?? 0) + signedAmount);
     }
 
     let updated = 0;
