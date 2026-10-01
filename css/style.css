@@ -929,6 +929,15 @@ textarea { min-height: 70px; resize: vertical; }
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
+.drawer-footer-actions { display: flex; align-items: center; gap: 16px; }
+.drawer-action-archive {
+  background: transparent;
+  color: var(--ink2);
+  border: none;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
 .drawer-action-delete { color: var(--red); }
 .drawer-action-save { min-width: 88px; border-radius: 999px; }
 .urgent-setting {

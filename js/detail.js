@@ -1,6 +1,6 @@
 // The repair pop-up: Cin7 details (fixed), lab fields (editable), comment, and history.
 import { $, esc, fmtDate, fmtDateTime, today, describeChanges, showBanner, STATUSES, PAYMENTS } from "./util.js";
-import { state, createRepair, saveRepair, deleteRepair, searchProducts, addProduct, loadCategories, newEvent, withLabDate } from "./data.js";
+import { state, createRepair, saveRepair, deleteRepair, searchProducts, addProduct, loadCategories, newEvent, withLabDate, moveStatus } from "./data.js";
 
 let openId = null; // the repair currently open, so its history can refresh live
 
@@ -304,7 +304,10 @@ export function openRepair(repair) {
   back.innerHTML = `<div class="modal drawer-modal">
     <div class="drawer-scroll">${drawerInfoBlock(r, isNew, fromCin7)}</div>
     <div class="drawer-footer">
-      <button class="danger drawer-action-delete" id="f-delete" ${isNew ? "hidden" : ""}>Delete</button>
+      <div class="drawer-footer-actions">
+        <button class="drawer-action-archive" id="f-archive" ${isNew ? "hidden" : ""}>Archive</button>
+        ${fromCin7 ? "" : `<button class="danger drawer-action-delete" id="f-delete" ${isNew ? "hidden" : ""}>Delete</button>`}
+      </div>
       <button class="primary drawer-action-save" id="f-save">Done</button>
     </div>
   </div>`;
@@ -352,10 +355,15 @@ export function openRepair(repair) {
   refreshHistory();
 
   if (!isNew) {
-    $("f-delete").onclick = () => {
-      if (!confirm("Delete this repair and its history?")) return;
-      deleteRepair(r.id).then(() => close()).catch((err) => showBanner("Could not delete: " + err.message));
+    $("f-archive").onclick = () => {
+      moveStatus(r, "Completed").then(() => close()).catch((err) => showBanner("Could not archive: " + err.message));
     };
+    if (!fromCin7) {
+      $("f-delete").onclick = () => {
+        if (!confirm("Delete this repair and its history?")) return;
+        deleteRepair(r.id).then(() => close()).catch((err) => showBanner("Could not delete: " + err.message));
+      };
+    }
   }
 
   $("f-save").onclick = () => saveRepairFromForm(r, isNew, fromCin7, picker, categoryPicker, categories, close);
