@@ -1,5 +1,5 @@
 // The repair pop-up: Cin7 details (fixed), lab fields (editable), comment, and history.
-import { $, esc, fmtDate, fmtDateTime, today, describeChanges, showBanner, statusPill, STATUSES, PAYMENTS } from "./util.js";
+import { $, esc, fmtDate, fmtDateTime, today, describeChanges, showBanner, STATUSES, PAYMENTS } from "./util.js";
 import { state, createRepair, saveRepair, deleteRepair, searchProducts, addProduct, loadCategories, newEvent, withLabDate } from "./data.js";
 
 let openId = null; // the repair currently open, so its history can refresh live
@@ -7,33 +7,14 @@ let openId = null; // the repair currently open, so its history can refresh live
 const options = (list, selected, withBlank) =>
   (withBlank ? `<option value="">—</option>` : "") + list.map((v) => `<option ${v === selected ? "selected" : ""}>${v}</option>`).join("");
 
-const field = (label, control, wide) => `<div class="field${wide ? " wide" : ""}"><label>${label}</label>${control}</div>`;
 const numberOrBlank = (text) => (text === "" ? "" : Number(text));
-const statusButtons = (current) => STATUSES.map((value) => `<button type="button" class="status-option${current === value ? " active" : ""}" data-status="${esc(value)}">${esc(value === "Created in Cin7" ? "To do" : value === "In Lab" ? "In lab" : value === "In Progress" ? "In progress" : value === "Ready for Pickup" ? "Ready for pickup" : value)}</button>`).join("");
+const statusLabel = (value) => ({ "Created in Cin7": "To do", "In Lab": "In lab", "In Progress": "In progress", "Ready for Pickup": "Ready for pickup", Completed: "Archived" })[value] || value;
+const orderClassLabel = (value) => value === "CA11002" ? "Warranty repair" : /^CA11001(?:\.|$)/.test(value) ? "Non-warranty repair" : value || "—";
+const statusButtons = (current) => [...STATUSES.slice(0, 4), ...(current === "Completed" ? ["Completed"] : [])].map((value) => `<button type="button" class="status-option${current === value ? " active" : ""}" data-status="${esc(value)}">${esc(statusLabel(value))}</button>`).join("");
 const categoryBox = (r) => `
   <div class="category-picker">
     <div class="category-input-row"><input id="f-category" autocomplete="off" aria-autocomplete="list" aria-controls="category-options" aria-expanded="false" placeholder="Search categories…" value="${esc(r.category)}"><button type="button" class="ghost category-toggle" id="f-category-toggle" aria-label="Show categories" title="Show categories" aria-expanded="false">▾</button></div>
     <div class="category-options" id="category-options" role="listbox" hidden></div>
-  </div>`;
-
-// Shown for repairs that came from Cin7: plain text, nothing to edit.
-const cin7Details = (r) => `
-  <div class="facts">
-    <div><span>Ordered</span>${fmtDate(r.orderCreated)}</div>
-    <div><span>Class</span>${esc(r.item)}</div>
-    <div><span>Qty</span>${esc(r.qty)}</div>
-  </div>
-  ${r.cin7Comments ? `<div class="cin7-comments">${esc(r.cin7Comments)}</div>` : ""}
-  <div class="muted" style="margin-top:6px">From Cin7 — can't be edited here.</div>`;
-
-// Shown for repairs entered by hand: the same details as inputs.
-const manualDetails = (r) => `
-  <div class="grid">
-    ${field("Invoice number", `<input id="f-invoice" value="${esc(r.invoiceNumber)}">`)}
-    ${field("Customer", `<input id="f-customer" value="${esc(r.customerName)}">`)}
-    ${field("Order created", `<input id="f-created" type="date" value="${r.orderCreated || ""}">`)}
-    ${field("Class", `<select id="f-class">${options(["Repair Non-Warranty", "Repair Warranty"], r.item, true)}</select>`)}
-    ${field("Qty", `<input id="f-qty" type="number" min="1" value="${r.qty || 1}">`)}
   </div>`;
 
 const drawerStatusRow = (r) => `
@@ -51,32 +32,15 @@ const drawerStatusRow = (r) => `
 const drawerInfoBlock = (r, isNew, fromCin7) => `
   <div class="drawer-header">
     <div>
-      <h2>${isNew ? "New repair" : esc(r.productName || r.invoiceNumber || r.customerName || "Repair")}</h2>
-      <div class="drawer-subtitle">${isNew ? "" : `${esc(r.customerName || "Customer")} • ${esc(fromCin7 ? "Cin7" : "Manual")}`}</div>
+      <h2>${isNew ? "New repair" : esc(r.productName || r.invoiceNumber || "Repair")}</h2>
+      <div class="drawer-subtitle">${isNew ? "" : `${esc(r.customerName || "Customer")} · ${esc(r.invoiceNumber || "")}`}</div>
     </div>
-    ${isNew ? "" : `<button type="button" class="drawer-close" id="f-close" aria-label="Close drawer">×</button>`}
+    <button type="button" class="drawer-close" id="f-close" aria-label="Close repair">×</button>
   </div>
 
   ${fromCin7 ? `<div class="drawer-banner">Synced from Cin7. Order details are locked and update automatically.</div>` : ""}
 
   ${drawerStatusRow(r)}
-
-  ${!fromCin7 ? `
-    <div class="drawer-manual-grid">
-      <div class="drawer-field">
-        <label>Invoice number</label>
-        <input id="f-invoice" value="${esc(r.invoiceNumber || "")}">
-      </div>
-      <div class="drawer-field">
-        <label>Customer</label>
-        <input id="f-customer" value="${esc(r.customerName || "")}">
-      </div>
-      <div class="drawer-field">
-        <label>Class</label>
-        <select id="f-class">${options(["Repair Non-Warranty", "Repair Warranty"], r.item, true)}</select>
-      </div>
-    </div>
-  ` : ""}
 
   <div class="drawer-meta-grid">
     <div class="drawer-field">
@@ -90,92 +54,51 @@ const drawerInfoBlock = (r, isNew, fromCin7) => `
     </div>
   </div>
 
-  <div class="drawer-meta-grid">
-    <div class="drawer-field">
-      <label>${fromCin7 ? "Payment (Cin7)" : "Payment"}</label>
-      <select id="f-payment" ${fromCin7 ? 'disabled title="Synced from Cin7; cannot be edited here"' : ""}>${options(PAYMENTS, r.paymentStatus)}</select>
-    </div>
+  <section class="drawer-section order-section">
+    <div class="drawer-section-heading"><h3>Order</h3>${fromCin7 ? `<span class="order-source">Cin7</span>` : ""}</div>
+    ${fromCin7 ? `
+      <div class="drawer-order-grid">
+        <div class="drawer-readonly"><label>Ordered</label><div>${esc(fmtDate(r.orderCreated))}</div></div>
+        <div class="drawer-readonly"><label>Qty</label><div>${esc(r.qty || "—")}</div></div>
+      </div>
+      <div class="drawer-readonly drawer-wide"><label>Class</label><div>${esc(orderClassLabel(r.item))}</div></div>
+      <div class="drawer-readonly drawer-wide"><label>Payment</label><div>${esc(r.paymentStatus || "Unpaid")}</div></div>
+      ${r.cin7Comments ? `<div class="drawer-readonly drawer-wide"><label>Comment from Cin7</label><div>${esc(r.cin7Comments)}</div></div>` : ""}
+    ` : `
+      <div class="drawer-order-grid">
+        <div class="drawer-field"><label>Invoice number</label><input id="f-invoice" value="${esc(r.invoiceNumber || "")}"></div>
+        <div class="drawer-field"><label>Customer</label><input id="f-customer" value="${esc(r.customerName || "")}"></div>
+      </div>
+      <div class="drawer-order-grid">
+        <div class="drawer-field"><label>Ordered</label><input id="f-created" type="date" value="${esc(r.orderCreated || "")}"></div>
+        <div class="drawer-field"><label>Qty</label><input id="f-qty" type="number" min="1" value="${r.qty || 1}"></div>
+      </div>
+      <div class="drawer-order-grid">
+        <div class="drawer-field"><label>Class</label><select id="f-class">${options(["Repair Non-Warranty", "Repair Warranty"], r.item, true)}</select></div>
+        <div class="drawer-field"><label>Payment</label><select id="f-payment">${options(PAYMENTS, r.paymentStatus)}</select></div>
+      </div>
+    `}
+  </section>
 
-    <div class="drawer-field">
-      <label>Received in lab</label>
-      <input id="f-lab" type="date" value="${esc(r.dateReceivedLab || "")}">
+  <section class="drawer-section lab-section">
+    <h3>Lab</h3>
+    <div class="drawer-field drawer-field-wide"><label>What needs doing</label><textarea id="f-description" placeholder="e.g. Replace zip">${esc(r.description)}</textarea>${r.cin7Comments ? `<button type="button" class="ghost small" id="copy-cin7">Copy from Cin7</button>` : ""}</div>
+    <div class="drawer-order-grid drawer-lab-numbers">
+      <div class="drawer-field"><label>Time (min)</label><input id="f-time" type="number" min="0" placeholder="0" value="${r.repairTime ?? ""}"></div>
+      <div class="drawer-field"><label>Materials ($)</label><input id="f-cost" type="number" min="0" step="0.01" placeholder="0.00" value="${r.materialCost ?? ""}"></div>
     </div>
-  </div>
-
-  <div class="drawer-order-grid">
-    <div class="drawer-field">
-      <label>Ordered</label>
-      <input id="f-created" type="date" value="${esc(r.orderCreated || "")}" ${fromCin7 ? "readonly" : ""}>
+    <div class="drawer-order-grid">
+      <div class="drawer-field"><label>Received in lab</label><input id="f-lab" type="date" value="${esc(r.dateReceivedLab || "")}"></div>
+      <div class="drawer-field"><label>Date completed</label><input id="f-out" type="date" value="${esc(r.dateOut || "")}"></div>
     </div>
-
-    <div class="drawer-field">
-      <label>Qty</label>
-      <input id="f-qty" type="number" min="1" value="${r.qty || 1}">
-    </div>
-  </div>
-
-  <div class="drawer-meta-grid">
-    <div class="drawer-field">
-      <label>Date completed</label>
-      <input id="f-out" type="date" value="${esc(r.dateOut || "")}">
-    </div>
-
-    <div class="drawer-field">
-      <label>Repair time (min)</label>
-      <input id="f-time" type="number" min="0" value="${r.repairTime ?? ""}">
-    </div>
-  </div>
-
-  <div class="drawer-meta-grid">
-    <div class="drawer-field">
-      <label>Raw material cost</label>
-      <div class="money"><span>$</span><input id="f-cost" type="number" min="0" step="0.01" value="${r.materialCost ?? ""}"></div>
-    </div>
-    <div class="drawer-field">
-      <label> </label>
-      <div class="spacer"></div>
-    </div>
-  </div>
-
-  <div class="drawer-field drawer-field-wide">
-    <label>Repair description</label>
-    <textarea id="f-description">${esc(r.description)}</textarea>
-    ${r.cin7Comments ? `<button type="button" class="ghost small" id="copy-cin7">Copy from Cin7</button>` : ""}
-  </div>
-
-  <div class="drawer-field drawer-field-wide">
-    <label>Comment</label>
-    <textarea id="f-comment" placeholder="Add a comment (posted when you save)…"></textarea>
-  </div>
+    <div class="drawer-field drawer-field-wide drawer-comment"><label>Add a note</label><textarea id="f-comment" placeholder="Saved with the repair"></textarea></div>
+    ${isNew ? "" : `<div class="drawer-activity"><h3>Activity</h3><div id="history"></div></div>`}
+  </section>
 `;
 
 const productBox = (r) => `
   <div class="product-row"><input id="f-product" autocomplete="off" placeholder="Type a name or SKU…" value="${esc(r.productName)}"><button type="button" class="ghost" id="f-product-clear">Clear</button></div>
   <div class="product-results" id="product-results"></div>`;
-
-const renderRepairModal = (r, isNew, fromCin7) => `
-  <div class="modal">
-    <h2><span>${isNew ? "New repair" : `${esc(r.invoiceNumber)} · ${esc(r.customerName)}`}</span>${isNew ? "" : statusPill(r.status)}</h2>
-    ${fromCin7 ? cin7Details(r) : manualDetails(r)}
-    <h3>Lab</h3>
-    <div class="grid">
-      ${field("Status", `<select id="f-status">${options(STATUSES, r.status)}</select>`) }
-      ${field(fromCin7 ? "Payment (Cin7)" : "Payment", `<select id="f-payment" ${fromCin7 ? 'disabled title="Synced from Cin7; cannot be edited here"' : ""}>${options(PAYMENTS, r.paymentStatus)}</select>`) }
-      ${field("Product (search Cin7 products)", productBox(r))}
-      ${field("Category", categoryBox(r))}
-      ${field("Received in lab", `<input id="f-lab" type="date" value="${r.dateReceivedLab || ""}">`) }
-      ${field("Date completed", `<input id="f-out" type="date" value="${r.dateOut || ""}">`) }
-      ${field("Repair time (min)", `<input id="f-time" type="number" min="0" value="${r.repairTime ?? ""}">`) }
-      ${field("Raw material cost", `<div class="money"><span>$</span><input id="f-cost" type="number" min="0" step="0.01" value="${r.materialCost ?? ""}"></div>`) }
-      ${field("Repair description", `<textarea id="f-description">${esc(r.description)}</textarea>${r.cin7Comments ? `<button type="button" class="ghost small" id="copy-cin7">Copy from Cin7</button>` : ""}`, true)}
-    </div>
-    <div style="margin-top:12px">${field("Comment", `<textarea id="f-comment" placeholder="Add a comment (posted when you save)…"></textarea>`, true)}</div>
-    <div class="actions">
-      <div>${isNew ? "" : `<button class="danger" id="f-delete">Delete</button>`}</div>
-      <div><button class="ghost" id="f-close">Close</button><button class="primary" id="f-save">Save</button></div>
-    </div>
-    ${isNew ? "" : `<button type="button" class="ghost small" id="history-toggle" style="margin-top:14px">Show history</button><div id="history" hidden style="margin-top:10px"></div>`}
-  </div>`;
 
 const collectRepairValues = (fromCin7, picker) => {
   const values = {
@@ -355,21 +278,18 @@ function setupProductPicker(r, categoryPicker) {
 
 export function openRepair(repair) {
   const isNew = !repair;
-  const r = repair || { status: "Received", paymentStatus: "Unpaid", dateReceivedLab: today() };
+  const r = repair || { status: "In Lab", paymentStatus: "Unpaid", dateReceivedLab: today() };
   const fromCin7 = Boolean(r.cin7Key);
   openId = r.id || null;
 
   const back = document.createElement("div");
-  back.className = "modal-back";
+  back.className = "modal-back drawer-back";
   back.innerHTML = `<div class="modal drawer-modal">
-    ${drawerInfoBlock(r, isNew, fromCin7)}
-
-    <div class="drawer-lower-row">
+    <div class="drawer-scroll">${drawerInfoBlock(r, isNew, fromCin7)}</div>
+    <div class="drawer-footer">
       <button class="danger drawer-action-delete" id="f-delete" ${isNew ? "hidden" : ""}>Delete</button>
       <button class="primary drawer-action-save" id="f-save">Done</button>
     </div>
-
-    ${isNew ? "" : `<button type="button" class="ghost small" id="history-toggle" style="margin-top:14px">Show history</button><div id="history" hidden style="margin-top:10px"></div>`}
   </div>`;
   document.body.appendChild(back);
 
@@ -401,13 +321,6 @@ export function openRepair(repair) {
     $("copy-cin7").onclick = () => {
       const box = $("f-description");
       box.value = box.value ? box.value + "\n" + r.cin7Comments : r.cin7Comments;
-    };
-  }
-  if (!isNew) {
-    $("history-toggle").onclick = () => {
-      const box = $("history");
-      box.hidden = !box.hidden;
-      $("history-toggle").textContent = box.hidden ? "Show history" : "Hide history";
     };
   }
   refreshHistory();

@@ -1,7 +1,7 @@
 // Start-up: sign-in, toolbar, and wiring the other modules together.
-import { $, esc, showBanner, STATUSES } from "./util.js";
+import { $, esc, showBanner } from "./util.js";
 import { state, connect, loadRepairs, loadUserRole, watchChanges, forceSync } from "./data.js";
-import { renderRepairs, initRepairViews } from "./list.js";
+import { renderRepairs, initRepairViews, setListFilter } from "./list.js";
 import { renderDashboard } from "./dashboard.js";
 import { renderAdmin, initAdmin, loadAdminData } from "./admin.js";
 import { openRepair, refreshHistory } from "./detail.js";
@@ -24,7 +24,6 @@ function setView(view) {
   const isDashboard = view === "dashboard";
   const isAdmin = view === "admin";
   $("search").hidden = isDashboard || isAdmin;
-  $("filter-status").hidden = view === "board" || isDashboard || isAdmin;
   $("add-repair").hidden = isAdmin;
   $("force-sync").hidden = isAdmin;
   $("summary").hidden = isDashboard || isAdmin;
@@ -45,13 +44,13 @@ function formatSyncError(err) {
 
 function showLogin(message) {
   const back = document.createElement("div");
-  back.className = "modal-back";
-  back.innerHTML = `<div class="modal" style="max-width:360px">
+  back.className = "modal-back login-back";
+  back.innerHTML = `<div class="modal login-modal">
     <h2>Sign in</h2>
     ${message ? `<div class="banner">${esc(message)}</div>` : ""}
     <div class="field"><label>Email</label><input id="login-email" type="email"></div>
     <div class="field" style="margin-top:8px"><label>Password</label><input id="login-password" type="password"></div>
-    <div class="actions"><span></span><button class="primary" id="login-go">Sign in</button></div>
+    <div class="login-actions"><button class="primary" id="login-go">Sign in</button></div>
   </div>`;
   document.body.appendChild(back);
   const signIn = async () => {
@@ -64,7 +63,11 @@ function showLogin(message) {
 }
 
 async function start() {
-  const { data: { user } } = await auth.getUser();
+  const { data: { user }, error } = await auth.getUser();
+  if (error || !user) {
+    showLogin();
+    return;
+  }
   state.me = { name: displayName(user) };
   try {
     await loadUserRole(user.id);
@@ -83,14 +86,16 @@ async function start() {
   watchChanges();
 }
 
-$("filter-status").innerHTML = `<option value="">All statuses</option>` + STATUSES.map((s) => `<option>${s}</option>`).join("");
 $("view-list").onclick = () => setView("list");
 $("view-board").onclick = () => setView("board");
 $("view-dashboard").onclick = () => setView("dashboard");
 $("view-admin").onclick = () => { if (state.isAdmin) { setView("admin"); loadAdminData(); } };
 $("search").oninput = renderActiveView;
-$("filter-status").onchange = renderActiveView;
 $("add-repair").onclick = () => openRepair(null);
+document.addEventListener("repairlab:show-archive", () => {
+  setView("list");
+  setListFilter("archived");
+});
 $("force-sync").onclick = async () => {
   setSyncState(true);
   showBanner("Syncing with Cin7 — this can take a few seconds…");

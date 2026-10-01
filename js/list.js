@@ -1,46 +1,72 @@
 // The List and Board views of all repairs.
-import { $, esc, fmtDate, paymentPill, showBanner, statusPill, STATUSES, displayStatus } from "./util.js";
+import { $, esc, today, showBanner, statusPill, STATUSES, displayStatus } from "./util.js";
 import { state, moveStatus } from "./data.js";
 import { openRepair } from "./detail.js";
 
-let completedExpanded = false;
+let listFilter = "all";
 
-function matchingRepairs(applyStatusFilter) {
+function matchingRepairs() {
   const text = $("search").value.trim().toLowerCase();
-  const status = $("filter-status").value;
   return state.repairs.filter((r) => {
-    if (applyStatusFilter && status && r.status !== status) return false;
     const searchable = [r.invoiceNumber, r.customerName, r.item, r.productName, r.description].join(" ").toLowerCase();
     return !text || searchable.includes(text);
   });
 }
 
+const filterMatches = (repair) => {
+  if (listFilter === "open") return repair.status !== "Completed";
+  if (listFilter === "unpaid") return repair.paymentStatus === "Unpaid" || repair.paymentStatus === "Partial";
+  if (listFilter === "warranty") return repair.item === "CA11002" || /\bwarranty\b/i.test(repair.item) && !/non[- ]warranty/i.test(repair.item);
+  if (listFilter === "archived") return repair.status === "Completed";
+  return true;
+};
+
+const dayNumber = (value) => value ? Math.floor(Date.parse(`${value}T00:00:00Z`) / 86400000) : null;
+const waitingDays = (repair) => {
+  const start = dayNumber(repair.dateReceivedLab || repair.orderCreated);
+  const end = dayNumber(repair.dateOut || today());
+  return start === null || end === null ? 0 : Math.max(0, end - start);
+};
+
+const repairClass = (item) => {
+  if (item === "CA11002" || /\bwarranty\b/i.test(item) && !/non[- ]warranty/i.test(item)) return "Warranty";
+  if (item === "CA11001" || /^CA11001\./.test(item) || /non[- ]warranty/i.test(item)) return "Non-warranty";
+  return item || "—";
+};
+
+const formatMoney = (value) => value === "" || value == null ? "—" : `$${Number(value).toFixed(2)}`;
+
 function tableHtml(repairs, emptyMessage = "No repairs to show.") {
   if (!repairs.length) return `<div class="table-wrap"><div class="empty">${esc(emptyMessage)}</div></div>`;
   const rows = repairs.map((r) => `
     <tr class="repair-row" draggable="true" data-id="${r.id}">
-      <td><b>${esc(r.invoiceNumber)}</b></td>
-      <td>${esc(r.customerName)}</td>
-      <td>${esc(r.productName)}</td>
+      <td><div class="list-product">${esc(r.productName || "Add product")}</div><div class="list-category">${esc(r.category || "")}</div></td>
+      <td>${esc(r.customerName || "—")}</td>
       <td>${statusPill(r.status)}</td>
-      <td>${fmtDate(r.dateReceivedLab)}</td>
-      <td>${paymentPill(r.paymentStatus)}</td>
+      <td>${esc(repairClass(r.item))}</td>
+      <td><span class="list-payment ${r.paymentStatus === "Paid" ? "is-paid" : r.paymentStatus === "Partial" ? "is-partial" : "is-unpaid"}">${esc(r.paymentStatus || "Unpaid")}</span></td>
+      <td>${waitingDays(r)} days total</td>
+      <td>${r.repairTime === "" || r.repairTime == null ? "—" : `${esc(r.repairTime)} min`}</td>
+      <td>${formatMoney(r.materialCost)}</td>
     </tr>`);
   return `<div class="table-wrap"><table>
-    <thead><tr><th>Invoice</th><th>Customer</th><th>Product</th><th>Status</th><th>In lab</th><th>Payment</th></tr></thead>
+    <thead><tr><th>Product</th><th>Customer</th><th>Status</th><th>Class</th><th>Payment</th><th>Waiting ↓</th><th>Time</th><th>Materials</th></tr></thead>
     <tbody>${rows.join("")}</tbody></table></div>`;
 }
 
 function listHtml() {
-  const repairs = matchingRepairs(true).filter((repair) => repair.status !== "Completed");
-  return tableHtml(repairs, "No active repairs to show.");
+  const filtered = matchingRepairs().filter(filterMatches);
+  const repairs = [...filtered].sort((a, b) => waitingDays(b) - waitingDays(a));
+  const filters = [["all", "All"], ["open", "Open"], ["unpaid", "Unpaid"], ["warranty", "Warranty"], ["archived", "Archived"]];
+  return `<div class="list-toolbar"><div class="list-filters" role="tablist" aria-label="Filter repairs">${filters.map(([value, label]) => `<button type="button" role="tab" aria-selected="${listFilter === value}" class="list-filter${listFilter === value ? " active" : ""}" data-list-filter="${value}">${label}</button>`).join("")}</div><span class="list-count">${repairs.length} repairs</span></div>${tableHtml(repairs, listFilter === "archived" ? "No archived repairs to show." : "No repairs to show.")}`;
 }
 
 function repairCard(repair) {
   const customerText = repair.customerName ? `${esc(repair.customerName)} · ${repair.cin7Key ? "Cin7" : "Manual"}` : "No customer";
   const productText = repair.productName ? esc(repair.productName) : '<span class="need">Add product</span>';
   const paymentDot = repair.paymentStatus === "Paid" ? "dot paid" : "dot";
-  const age = repair.dateReceivedLab ? "Today" : "Today";
+  const ageDays = waitingDays(repair);
+  const age = ageDays === 0 ? "Today" : ageDays === 1 ? "1 day" : `${ageDays} days`;
   return `
     <div class="card" draggable="true" data-id="${repair.id}" tabindex="0" role="button" aria-label="Open repair ${esc(repair.invoiceNumber)}">
       <div class="card-title">${productText}</div>
@@ -53,7 +79,7 @@ function repairCard(repair) {
 }
 
 function boardHtml() {
-  const repairs = matchingRepairs(false);
+  const repairs = matchingRepairs();
   const columns = STATUSES.filter((status) => status !== "Completed").map((status) => {
     const statusRepairs = repairs.filter((r) => r.status === status);
     return `<div class="col" data-status="${status}"><div class="col-head"><span>${displayStatus(status)}</span><span>${statusRepairs.length}</span></div><div class="col-body">${statusRepairs.map(repairCard).join("") || '<div class="empty">Nothing here</div>'}</div></div>`;
@@ -63,25 +89,25 @@ function boardHtml() {
 
 function archiveHtml() {
   const searchActive = $("search").value.trim() !== "";
-  const completedFilter = state.view === "list" && $("filter-status").value === "Completed";
-  const completedVisible = completedExpanded || searchActive || completedFilter;
-  const completed = matchingRepairs(false).filter((repair) => repair.status === "Completed");
+  const completed = matchingRepairs().filter((repair) => repair.status === "Completed");
   const archiveCount = state.repairs.filter((repair) => repair.status === "Completed").length;
-  const archiveLabel = searchActive ? "Search results" : completedFilter ? "Filtered by status" : completedExpanded ? "Hide archive" : "View archive";
-  const archiveRows = tableHtml(completed, "No completed repairs match this search.");
   return `<section class="archive-dropzone" data-status="Completed" aria-label="Completed archive">
       <div class="archive-message"><span class="archive-icon" aria-hidden="true"></span><p>Drop here once it's picked up and paid</p></div>
-      <div class="archive-actions"><span class="archive-total">${archiveCount} archived</span><button type="button" class="archive-toggle" data-toggle-completed aria-expanded="${completedVisible}" aria-label="Completed archive, ${archiveCount} repairs${searchActive ? ", matching search" : ""}" ${searchActive || completedFilter ? "disabled" : ""}>${archiveLabel}</button></div>
-      ${completedVisible ? `<div class="archive-list">${archiveRows}</div>` : ""}
+      <div class="archive-actions"><span class="archive-total">${archiveCount} archived</span><button type="button" class="archive-toggle" data-view-archived>View archived</button></div>
     </section>`;
 }
 
 export function renderRepairs() {
-  $("content").innerHTML = (state.view === "list" ? listHtml() : boardHtml()) + archiveHtml();
+  $("content").innerHTML = state.view === "list" ? listHtml() : boardHtml() + archiveHtml();
   const open = state.repairs.filter((r) => r.status !== "Completed").length;
   const outstanding = state.repairs.filter((r) => r.paymentStatus === "Unpaid" || r.paymentStatus === "Partial").length;
-  const late = state.repairs.filter((r) => r.status !== "Completed" && r.status !== "Ready for Pickup" && r.daysSince !== undefined && r.daysSince > 7).length;
-  $("summary").innerHTML = `<div><strong>${open}</strong><span>in the lab</span></div><div><strong class="warn">${late}</strong><span>waiting over 7 days</span></div><div><strong>${outstanding}</strong><span>unpaid</span></div>`;
+  const late = state.repairs.filter((r) => r.status !== "Completed" && r.status !== "Ready for Pickup" && waitingDays(r) > 36).length;
+  $("summary").innerHTML = `<div><strong>${open}</strong><span>in the lab</span></div><div><strong class="warn">${late}</strong><span>waiting over 36 days</span></div><div><strong>${outstanding}</strong><span>unpaid</span></div>`;
+}
+
+export function setListFilter(filter) {
+  listFilter = filter;
+  if (state.view === "list") renderRepairs();
 }
 
 // One-time wiring: clicks and drag-and-drop are handled on the container so they survive re-rendering.
@@ -91,10 +117,14 @@ export function initRepairViews() {
   const clearHighlights = () => content.querySelectorAll(".dragover, .dragging").forEach((el) => el.classList.remove("dragover", "dragging"));
 
   content.onclick = (e) => {
-    const archiveToggle = e.target.closest("[data-toggle-completed]");
-    if (archiveToggle) {
-      if ($("search").value.trim()) return;
-      completedExpanded = !completedExpanded;
+    const archiveButton = e.target.closest("[data-view-archived]");
+    if (archiveButton) {
+      document.dispatchEvent(new CustomEvent("repairlab:show-archive"));
+      return;
+    }
+    const filterButton = e.target.closest("[data-list-filter]");
+    if (filterButton) {
+      listFilter = filterButton.dataset.listFilter;
       renderRepairs();
       return;
     }

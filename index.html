@@ -21,10 +21,11 @@
   <main>
     <div class="app-shell">
       <div id="banner"></div>
+      <nav class="view-switcher" aria-label="Main views">
+          <div class="segmented"><button id="view-board" class="active">Board</button><button id="view-list">List</button><button id="view-dashboard">Insights</button><button id="view-admin" hidden>Settings</button></div>
+        </nav>
       <div class="toolbar">
-        <div class="segmented"><button id="view-board" class="active">Board</button><button id="view-list">List</button><button id="view-dashboard">Insights</button><button id="view-admin" hidden>Settings</button></div>
         <input type="search" id="search" placeholder="Search repairs">
-        <select id="filter-status"></select>
         <button class="ghost" id="force-sync" title="Re-check Cin7 for new orders and product changes">↻ Synced just now</button>
         <button class="primary" id="add-repair">New repair</button>
       </div>
