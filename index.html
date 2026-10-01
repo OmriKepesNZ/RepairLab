@@ -9,21 +9,28 @@
 </head>
 <body>
   <header>
-    <img id="logo" src="logo.png" alt="" onerror="this.remove()">
-    <h1>Repair Lab</h1>
+    <div class="brand-wrap">
+      <img id="logo" src="logo.png" alt="" onerror="this.remove()">
+      <div class="brand-copy">
+        <span class="eyebrow">Operations</span>
+        <h1>Repair Lab</h1>
+      </div>
+    </div>
     <button id="signout" class="ghost" hidden>Sign out</button>
   </header>
   <main>
-    <div id="banner"></div>
-    <div class="toolbar">
-      <div class="segmented"><button id="view-board" class="active">Board</button><button id="view-list">List</button><button id="view-dashboard">Dashboard</button><button id="view-admin" hidden>Admin</button></div>
-      <input type="search" id="search" placeholder="Search invoice, customer, product…">
-      <select id="filter-status"></select>
-      <button class="primary" id="add-repair">+ New repair</button>
-      <button class="ghost" id="force-sync" title="Re-check Cin7 for new orders and product changes">⟳ Force sync</button>
+    <div class="app-shell">
+      <div id="banner"></div>
+      <div class="toolbar">
+        <div class="segmented"><button id="view-board" class="active">Board</button><button id="view-list">List</button><button id="view-dashboard">Insights</button><button id="view-admin" hidden>Settings</button></div>
+        <input type="search" id="search" placeholder="Search repairs">
+        <select id="filter-status"></select>
+        <button class="ghost" id="force-sync" title="Re-check Cin7 for new orders and product changes">↻ Synced just now</button>
+        <button class="primary" id="add-repair">New repair</button>
+      </div>
+      <div id="summary" class="muted"></div>
+      <div id="content"></div>
     </div>
-    <div id="summary" class="muted"></div>
-    <div id="content"></div>
   </main>
 
   <script src="config.js"></script>

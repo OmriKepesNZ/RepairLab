@@ -19,6 +19,8 @@ function setView(view) {
   $("view-board").classList.toggle("active", view === "board");
   $("view-dashboard").classList.toggle("active", view === "dashboard");
   $("view-admin").classList.toggle("active", view === "admin");
+  $("view-dashboard").textContent = "Insights";
+  $("view-admin").textContent = "Settings";
   const isDashboard = view === "dashboard";
   const isAdmin = view === "admin";
   $("search").hidden = isDashboard || isAdmin;
@@ -32,7 +34,7 @@ function setView(view) {
 function setSyncState(syncing) {
   const button = $("force-sync");
   button.disabled = syncing;
-  button.textContent = syncing ? "Syncing…" : "⟳ Force sync";
+  button.textContent = syncing ? "Syncing…" : "↻ Synced just now";
   button.title = syncing ? "Sync in progress…" : "Re-check Cin7 for new orders and product changes";
 }
 

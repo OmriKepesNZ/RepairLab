@@ -9,6 +9,7 @@ const options = (list, selected, withBlank) =>
 
 const field = (label, control, wide) => `<div class="field${wide ? " wide" : ""}"><label>${label}</label>${control}</div>`;
 const numberOrBlank = (text) => (text === "" ? "" : Number(text));
+const statusButtons = (current) => STATUSES.map((value) => `<button type="button" class="status-option${current === value ? " active" : ""}" data-status="${esc(value)}">${esc(value === "Created in Cin7" ? "To do" : value === "In Lab" ? "In lab" : value === "In Progress" ? "In progress" : value === "Ready for Pickup" ? "Ready for pickup" : value)}</button>`).join("");
 const categoryBox = (r) => `
   <div class="category-picker">
     <div class="category-input-row"><input id="f-category" autocomplete="off" aria-autocomplete="list" aria-controls="category-options" aria-expanded="false" placeholder="Search categories…" value="${esc(r.category)}"><button type="button" class="ghost category-toggle" id="f-category-toggle" aria-label="Show categories" title="Show categories" aria-expanded="false">▾</button></div>
@@ -34,6 +35,119 @@ const manualDetails = (r) => `
     ${field("Class", `<select id="f-class">${options(["Repair Non-Warranty", "Repair Warranty"], r.item, true)}</select>`)}
     ${field("Qty", `<input id="f-qty" type="number" min="1" value="${r.qty || 1}">`)}
   </div>`;
+
+const drawerStatusRow = (r) => `
+  <div class="drawer-section">
+    <div class="drawer-label-row">
+      <label class="drawer-label">Status</label>
+    </div>
+    <div class="status-picker" aria-label="Repair status">
+      ${statusButtons(r.status)}
+    </div>
+    <select id="f-status" class="sr-only">${options(STATUSES, r.status)}</select>
+  </div>
+`;
+
+const drawerInfoBlock = (r, isNew, fromCin7) => `
+  <div class="drawer-header">
+    <div>
+      <h2>${isNew ? "New repair" : esc(r.productName || r.invoiceNumber || r.customerName || "Repair")}</h2>
+      <div class="drawer-subtitle">${isNew ? "" : `${esc(r.customerName || "Customer")} • ${esc(fromCin7 ? "Cin7" : "Manual")}`}</div>
+    </div>
+    ${isNew ? "" : `<button type="button" class="drawer-close" id="f-close" aria-label="Close drawer">×</button>`}
+  </div>
+
+  ${fromCin7 ? `<div class="drawer-banner">Synced from Cin7. Order details are locked and update automatically.</div>` : ""}
+
+  ${drawerStatusRow(r)}
+
+  ${!fromCin7 ? `
+    <div class="drawer-manual-grid">
+      <div class="drawer-field">
+        <label>Invoice number</label>
+        <input id="f-invoice" value="${esc(r.invoiceNumber || "")}">
+      </div>
+      <div class="drawer-field">
+        <label>Customer</label>
+        <input id="f-customer" value="${esc(r.customerName || "")}">
+      </div>
+      <div class="drawer-field">
+        <label>Class</label>
+        <select id="f-class">${options(["Repair Non-Warranty", "Repair Warranty"], r.item, true)}</select>
+      </div>
+    </div>
+  ` : ""}
+
+  <div class="drawer-meta-grid">
+    <div class="drawer-field">
+      <label>Product</label>
+      ${productBox(r)}
+    </div>
+
+    <div class="drawer-field">
+      <label>Category</label>
+      ${categoryBox(r)}
+    </div>
+  </div>
+
+  <div class="drawer-meta-grid">
+    <div class="drawer-field">
+      <label>${fromCin7 ? "Payment (Cin7)" : "Payment"}</label>
+      <select id="f-payment" ${fromCin7 ? 'disabled title="Synced from Cin7; cannot be edited here"' : ""}>${options(PAYMENTS, r.paymentStatus)}</select>
+    </div>
+
+    <div class="drawer-field">
+      <label>Received in lab</label>
+      <input id="f-lab" type="date" value="${esc(r.dateReceivedLab || "")}">
+    </div>
+  </div>
+
+  <div class="drawer-order-grid">
+    <div class="drawer-field">
+      <label>Ordered</label>
+      <input id="f-created" type="date" value="${esc(r.orderCreated || "")}" ${fromCin7 ? "readonly" : ""}>
+    </div>
+
+    <div class="drawer-field">
+      <label>Qty</label>
+      <input id="f-qty" type="number" min="1" value="${r.qty || 1}">
+    </div>
+  </div>
+
+  <div class="drawer-meta-grid">
+    <div class="drawer-field">
+      <label>Date completed</label>
+      <input id="f-out" type="date" value="${esc(r.dateOut || "")}">
+    </div>
+
+    <div class="drawer-field">
+      <label>Repair time (min)</label>
+      <input id="f-time" type="number" min="0" value="${r.repairTime ?? ""}">
+    </div>
+  </div>
+
+  <div class="drawer-meta-grid">
+    <div class="drawer-field">
+      <label>Raw material cost</label>
+      <div class="money"><span>$</span><input id="f-cost" type="number" min="0" step="0.01" value="${r.materialCost ?? ""}"></div>
+    </div>
+    <div class="drawer-field">
+      <label> </label>
+      <div class="spacer"></div>
+    </div>
+  </div>
+
+  <div class="drawer-field drawer-field-wide">
+    <label>Repair description</label>
+    <textarea id="f-description">${esc(r.description)}</textarea>
+    ${r.cin7Comments ? `<button type="button" class="ghost small" id="copy-cin7">Copy from Cin7</button>` : ""}
+  </div>
+
+  <div class="drawer-field drawer-field-wide">
+    <label>Comment</label>
+    <textarea id="f-comment" placeholder="Add a comment (posted when you save)…"></textarea>
+  </div>
+`;
 
 const productBox = (r) => `
   <div class="product-row"><input id="f-product" autocomplete="off" placeholder="Type a name or SKU…" value="${esc(r.productName)}"><button type="button" class="ghost" id="f-product-clear">Clear</button></div>
@@ -247,32 +361,31 @@ export function openRepair(repair) {
 
   const back = document.createElement("div");
   back.className = "modal-back";
-  back.innerHTML = `<div class="modal">
-    <h2><span>${isNew ? "New repair" : `${esc(r.invoiceNumber)} · ${esc(r.customerName)}`}</span>${isNew ? "" : statusPill(r.status)}</h2>
-    ${fromCin7 ? cin7Details(r) : manualDetails(r)}
-    <h3>Lab</h3>
-    <div class="grid">
-      ${field("Status", `<select id="f-status">${options(STATUSES, r.status)}</select>`)}
-      ${field(fromCin7 ? "Payment (Cin7)" : "Payment", `<select id="f-payment" ${fromCin7 ? 'disabled title="Synced from Cin7; cannot be edited here"' : ""}>${options(PAYMENTS, r.paymentStatus)}</select>`)}
-      ${field("Product (search Cin7 products)", productBox(r))}
-      ${field("Category", categoryBox(r))}
-      ${field("Received in lab", `<input id="f-lab" type="date" value="${r.dateReceivedLab || ""}">`)}
-      ${field("Date completed", `<input id="f-out" type="date" value="${r.dateOut || ""}">`)}
-      ${field("Repair time (min)", `<input id="f-time" type="number" min="0" value="${r.repairTime ?? ""}">`)}
-      ${field("Raw material cost", `<div class="money"><span>$</span><input id="f-cost" type="number" min="0" step="0.01" value="${r.materialCost ?? ""}"></div>`)}
-      ${field("Repair description", `<textarea id="f-description">${esc(r.description)}</textarea>${r.cin7Comments ? `<button type="button" class="ghost small" id="copy-cin7">Copy from Cin7</button>` : ""}`, true)}
+  back.innerHTML = `<div class="modal drawer-modal">
+    ${drawerInfoBlock(r, isNew, fromCin7)}
+
+    <div class="drawer-lower-row">
+      <button class="danger drawer-action-delete" id="f-delete" ${isNew ? "hidden" : ""}>Delete</button>
+      <button class="primary drawer-action-save" id="f-save">Done</button>
     </div>
-    <div style="margin-top:12px">${field("Comment", `<textarea id="f-comment" placeholder="Add a comment (posted when you save)…"></textarea>`, true)}</div>
-    <div class="actions">
-      <div>${isNew ? "" : `<button class="danger" id="f-delete">Delete</button>`}</div>
-      <div><button class="ghost" id="f-close">Close</button><button class="primary" id="f-save">Save</button></div>
-    </div>
+
     ${isNew ? "" : `<button type="button" class="ghost small" id="history-toggle" style="margin-top:14px">Show history</button><div id="history" hidden style="margin-top:10px"></div>`}
   </div>`;
   document.body.appendChild(back);
 
   const close = () => { openId = null; back.remove(); };
-  $("f-close").onclick = close;
+  const closeButton = $("f-close");
+  if (closeButton) closeButton.onclick = close;
+
+  document.querySelectorAll(".status-option").forEach((button) => {
+    button.onclick = () => {
+      const select = $("f-status");
+      if (!select) return;
+      select.value = button.dataset.status;
+      document.querySelectorAll(".status-option").forEach((el) => el.classList.toggle("active", el === button));
+    };
+  });
+
   let categories = [];
   const categoryPicker = setupCategoryPicker(r, () => categories);
   const picker = setupProductPicker(r, categoryPicker);

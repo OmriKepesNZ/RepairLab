@@ -10,9 +10,17 @@ export const fmtDateTime = (iso) => new Date(iso).toLocaleString("en-NZ", { day:
 
 export const STATUSES = ["Created in Cin7", "In Lab", "In Progress", "Ready for Pickup", "Completed"];
 export const PAYMENTS = ["Unpaid", "Partial", "Paid", "Waived"];
+const STATUS_LABELS = {
+  "Created in Cin7": "To do",
+  "In Lab": "In lab",
+  "In Progress": "In progress",
+  "Ready for Pickup": "Ready for pickup",
+  Completed: "Archived",
+};
 const STATUS_CLASS = { "Created in Cin7": "cin7", "In Lab": "in-lab", "In Progress": "prog", "Ready for Pickup": "ready", Completed: "done" };
 const PAYMENT_CLASS = { Unpaid: "unpaid", Partial: "partial", Paid: "paid", Waived: "waived" };
-export const statusPill = (status) => `<span class="pill ${STATUS_CLASS[status] || ""}">${esc(status)}</span>`;
+export const displayStatus = (status) => STATUS_LABELS[status] || status;
+export const statusPill = (status) => `<span class="pill ${STATUS_CLASS[status] || ""}">${esc(displayStatus(status))}</span>`;
 export const paymentPill = (payment) => `<span class="pill ${PAYMENT_CLASS[payment] || ""}">${esc(payment)}</span>`;
 
 // Names used when writing "what changed" into a repair's history.
