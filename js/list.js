@@ -68,7 +68,8 @@ function listHtml() {
 function repairCard(repair) {
   const customerText = repair.customerName ? `${esc(repair.customerName)} · ${repair.cin7Key ? "Cin7" : "Manual"}` : "No customer";
   const productText = repair.productName ? esc(repair.productName) : '<span class="need">Add product</span>';
-  const paymentDot = repair.paymentStatus === "Paid" ? "dot paid" : "dot";
+  const paymentDot = ["Paid", "Waived"].includes(repair.paymentStatus) ? "dot paid" : "dot";
+  const paymentLabel = repair.paymentStatus === "Waived" ? "Waived" : repair.paymentStatus === "Partial" ? "Partial" : repair.paymentStatus === "Paid" ? "Paid" : "Unpaid";
   const ageDays = waitingDays(repair);
   const age = ageDays === 0 ? "Today" : ageDays === 1 ? "1 day" : `${ageDays} days`;
   const ageClass = isOverdue(repair, ageDays) ? "late-text is-late" : "late-text";
@@ -77,7 +78,7 @@ function repairCard(repair) {
       <div class="card-title-row"><div class="card-title">${productText}</div>${repair.isUrgent ? `<span class="urgent-badge">Urgent</span>` : ""}</div>
       <div class="card-subtitle">${customerText}</div>
       <div class="card-footer">
-        <span class="${paymentDot}">${repair.paymentStatus === "Paid" ? "Paid" : "Unpaid"}</span>
+        <span class="${paymentDot}">${paymentLabel}</span>
         <span class="${ageClass}">${age}</span>
       </div>
     </div>`;
