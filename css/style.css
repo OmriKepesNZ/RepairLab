@@ -247,7 +247,8 @@ header h1 {
 }
 .dot.paid::before { background: var(--green); }
 .dot.paid { color: var(--green); }
-.late-text { color: var(--amber); font-weight: 600; }
+.late-text { color: var(--ink2); font-weight: 500; }
+.late-text.is-late { color: var(--amber); font-weight: 600; }
 .empty {
   border: 1.5px dashed var(--line);
   border-radius: 14px;

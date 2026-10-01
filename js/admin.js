@@ -1,11 +1,12 @@
 // Admin-only tools. RLS and the admin-users Edge Function enforce access server-side.
 import { $, esc, showBanner } from "./util.js";
-import { state, loadCategories, listCustomProducts, addProduct, updateCustomProduct, deleteCustomProduct, loadCin7RepairCodes, saveCin7RepairCodes, listAdminUsers, createAdminUser, updateAdminUserRole, forceSync } from "./data.js";
+import { state, loadCategories, listCustomProducts, addProduct, updateCustomProduct, deleteCustomProduct, loadCin7Settings, saveCin7Settings, listAdminUsers, createAdminUser, updateAdminUserRole, forceSync } from "./data.js";
 
 let categories = [];
 let products = [];
 let users = [];
 let repairCodes = ["CA11001", "CA11002"];
+let waitingDays = 36;
 let loading = false;
 let productError = "";
 let userError = "";
@@ -22,7 +23,7 @@ const categoryOptions = (selected) =>
 const cin7SettingsError = (error) => {
   const message = error?.message || "Could not access Cin7 settings.";
   return message.includes("schema cache") || /cin7_settings.*does not exist/i.test(message)
-    ? "Apply the Cin7 repair-codes migration to enable saving codes."
+    ? "Apply the latest Cin7 settings migration to enable saving settings."
     : message;
 };
 
@@ -78,8 +79,7 @@ const usersPanel = () => `
 const preferencesPanel = () => `
   <section class="settings-card" aria-labelledby="settings-preferences-heading">
     <h2 id="settings-preferences-heading">Preferences</h2>
-    <div class="settings-preference-row"><div class="settings-description"><strong>Flag repairs waiting longer than</strong><span>Shown in amber on the board</span></div><div class="settings-threshold"><input value="36" aria-label="Waiting threshold in days" readonly><span>days</span></div></div>
-    <div class="settings-preference-row"><strong>Appearance</strong><div class="settings-static-segmented" aria-label="Appearance"><span class="selected">Auto</span><span>Light</span><span>Dark</span></div></div>
+    <div class="settings-preference-row"><div class="settings-description"><strong>Flag repairs waiting longer than</strong><span>Shown in amber on the board</span></div><div class="settings-threshold"><input type="number" min="1" max="3650" data-waiting-days aria-label="Waiting threshold in days" value="${waitingDays}"><span>days</span></div></div>
   </section>`;
 
 export function renderAdmin() {
@@ -105,12 +105,14 @@ export async function loadAdminData() {
   userError = "";
   codeError = "";
   repaint();
-  const results = await Promise.allSettled([loadCategories(), listCustomProducts(), listAdminUsers(), loadCin7RepairCodes()]);
+  const results = await Promise.allSettled([loadCategories(), listCustomProducts(), listAdminUsers(), loadCin7Settings()]);
   const [categoryResult, productResult, userResult, codeResult] = results;
   categories = categoryResult.status === "fulfilled" ? categoryResult.value : [];
   products = productResult.status === "fulfilled" ? productResult.value : [];
   users = userResult.status === "fulfilled" ? userResult.value : [];
-  repairCodes = codeResult.status === "fulfilled" ? codeResult.value : ["CA11001", "CA11002"];
+  repairCodes = codeResult.status === "fulfilled" ? codeResult.value.repairCodes : ["CA11001", "CA11002"];
+  waitingDays = codeResult.status === "fulfilled" ? codeResult.value.waitingDays : 36;
+  state.waitingDaysThreshold = waitingDays;
   if (productResult.status === "rejected") productError = productResult.reason?.message || "Could not load custom products.";
   if (userResult.status === "rejected") userError = userResult.reason?.message || "Could not load people.";
   if (codeResult.status === "rejected") codeError = cin7SettingsError(codeResult.reason);
@@ -138,17 +140,22 @@ export function initAdmin() {
     }
     if (event.target.closest("#settings-save")) {
       const enteredCodes = [...content.querySelectorAll("[data-repair-code]")].map((input) => input.value.trim().toUpperCase());
+      const enteredWaitingDays = Number(content.querySelector("[data-waiting-days]").value);
       if (enteredCodes.some((code) => !code)) return showBanner("Enter a code or remove the empty row.");
       if (new Set(enteredCodes).size !== enteredCodes.length) return showBanner("Each Cin7 code can only be listed once.");
+      if (!Number.isInteger(enteredWaitingDays) || enteredWaitingDays < 1 || enteredWaitingDays > 3650) return showBanner("Enter a waiting threshold between 1 and 3650 days.");
       savingCodes = true;
       codeError = "";
       repaint();
       try {
-        repairCodes = await saveCin7RepairCodes(enteredCodes);
-        showBanner("Cin7 repair codes saved.");
+        const saved = await saveCin7Settings(enteredCodes, enteredWaitingDays);
+        repairCodes = saved.repairCodes;
+        waitingDays = saved.waitingDays;
+        state.waitingDaysThreshold = saved.waitingDays;
+        showBanner("Settings saved successfully.");
       } catch (err) {
         codeError = cin7SettingsError(err);
-        showBanner("Could not save Cin7 repair codes: " + codeError);
+        showBanner("Could not save settings: " + codeError);
       } finally {
         savingCodes = false;
         repaint();

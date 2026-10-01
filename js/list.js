@@ -27,6 +27,9 @@ const waitingDays = (repair) => {
   const end = dayNumber(repair.dateOut || today());
   return start === null || end === null ? 0 : Math.max(0, end - start);
 };
+const waitingThreshold = () => Number(state.waitingDaysThreshold ?? 36);
+const isOverdue = (repair, days = waitingDays(repair)) =>
+  repair.status !== "Completed" && repair.status !== "Ready for Pickup" && days > waitingThreshold();
 
 const repairClass = (item) => {
   if (item === "CA11002" || /\bwarranty\b/i.test(item) && !/non[- ]warranty/i.test(item)) return "Warranty";
@@ -67,13 +70,14 @@ function repairCard(repair) {
   const paymentDot = repair.paymentStatus === "Paid" ? "dot paid" : "dot";
   const ageDays = waitingDays(repair);
   const age = ageDays === 0 ? "Today" : ageDays === 1 ? "1 day" : `${ageDays} days`;
+  const ageClass = isOverdue(repair, ageDays) ? "late-text is-late" : "late-text";
   return `
     <div class="card" draggable="true" data-id="${repair.id}" tabindex="0" role="button" aria-label="Open repair ${esc(repair.invoiceNumber)}">
       <div class="card-title">${productText}</div>
       <div class="card-subtitle">${customerText}</div>
       <div class="card-footer">
         <span class="${paymentDot}">${repair.paymentStatus === "Paid" ? "Paid" : "Unpaid"}</span>
-        <span class="late-text">${age}</span>
+        <span class="${ageClass}">${age}</span>
       </div>
     </div>`;
 }
@@ -101,8 +105,8 @@ export function renderRepairs() {
   $("content").innerHTML = state.view === "list" ? listHtml() : boardHtml() + archiveHtml();
   const open = state.repairs.filter((r) => r.status !== "Completed").length;
   const outstanding = state.repairs.filter((r) => r.paymentStatus === "Unpaid" || r.paymentStatus === "Partial").length;
-  const late = state.repairs.filter((r) => r.status !== "Completed" && r.status !== "Ready for Pickup" && waitingDays(r) > 36).length;
-  $("summary").innerHTML = `<div><strong>${open}</strong><span>in the lab</span></div><div><strong class="warn">${late}</strong><span>waiting over 36 days</span></div><div><strong>${outstanding}</strong><span>unpaid</span></div>`;
+  const late = state.repairs.filter((repair) => isOverdue(repair)).length;
+  $("summary").innerHTML = `<div><strong>${open}</strong><span>in the lab</span></div><div><strong class="warn">${late}</strong><span>waiting over ${waitingThreshold()} days</span></div><div><strong>${outstanding}</strong><span>unpaid</span></div>`;
 }
 
 export function setListFilter(filter) {

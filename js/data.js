@@ -1,7 +1,7 @@
 // Everything that talks to Supabase. The rest of the app only uses these functions.
 import { showBanner, today, STATUSES } from "./util.js";
 
-export const state = { repairs: [], me: { name: "Someone" }, view: "board", role: "staff", isAdmin: false };
+export const state = { repairs: [], me: { name: "Someone" }, view: "board", role: "staff", isAdmin: false, waitingDaysThreshold: 36 };
 
 let db;
 let onChange = () => {};
@@ -124,22 +124,28 @@ export async function listCustomProducts() {
   return data;
 }
 
-export async function loadCin7RepairCodes() {
-  const { data, error } = await db.from("cin7_settings").select("repair_codes").eq("singleton", true).maybeSingle();
+export async function loadCin7Settings() {
+  const { data, error } = await db.from("cin7_settings").select("repair_codes, waiting_days").eq("singleton", true).maybeSingle();
   if (error) throw error;
-  return data?.repair_codes ?? ["CA11001", "CA11002"];
+  const settings = {
+    repairCodes: data?.repair_codes ?? ["CA11001", "CA11002"],
+    waitingDays: Number(data?.waiting_days) || 36,
+  };
+  state.waitingDaysThreshold = settings.waitingDays;
+  return settings;
 }
 
-export async function saveCin7RepairCodes(codes) {
+export async function saveCin7Settings(codes, waitingDays) {
   const repairCodes = [...new Set(codes.map((code) => code.trim().toUpperCase()).filter(Boolean))];
   const { data, error } = await db.from("cin7_settings")
-    .update({ repair_codes: repairCodes, updated_at: new Date().toISOString() })
+    .update({ repair_codes: repairCodes, waiting_days: waitingDays, updated_at: new Date().toISOString() })
     .eq("singleton", true)
-    .select("repair_codes")
+    .select("repair_codes, waiting_days")
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error("Cin7 settings were not found. Apply the latest database migration first.");
-  return data.repair_codes;
+  state.waitingDaysThreshold = Number(data.waiting_days) || 36;
+  return { repairCodes: data.repair_codes, waitingDays: state.waitingDaysThreshold };
 }
 
 export async function updateCustomProduct(code, label, category) {

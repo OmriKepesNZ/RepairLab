@@ -1,6 +1,6 @@
 // Start-up: sign-in, toolbar, and wiring the other modules together.
 import { $, esc, showBanner } from "./util.js";
-import { state, connect, loadRepairs, loadUserRole, watchChanges, forceSync } from "./data.js";
+import { state, connect, loadRepairs, loadUserRole, loadCin7Settings, watchChanges, forceSync } from "./data.js";
 import { renderRepairs, initRepairViews, setListFilter } from "./list.js";
 import { renderDashboard } from "./dashboard.js";
 import { renderAdmin, initAdmin, loadAdminData } from "./admin.js";
@@ -76,6 +76,11 @@ async function start() {
     state.role = "staff";
     state.isAdmin = false;
     showBanner("Could not load access level: " + err.message);
+  }
+  try {
+    await loadCin7Settings();
+  } catch {
+    state.waitingDaysThreshold = 36;
   }
   $("view-admin").hidden = !state.isAdmin;
   $("signout").hidden = false;
