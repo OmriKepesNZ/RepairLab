@@ -62,7 +62,7 @@ const inviteForm = () => `
   <form id="admin-create-user" class="settings-invite-form">
     <label><span>Name</span><input name="name" autocomplete="name" required></label>
     <label><span>Email</span><input name="email" type="email" autocomplete="email" required></label>
-    <label><span>Initial password</span><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+    <label><span>Initial password</span><input name="password" type="password" autocomplete="new-password" minlength="8" required><small>At least 8 characters, with uppercase, lowercase, number, and symbol.</small></label>
     <label><span>Access level</span><select name="role"><option value="staff">Staff</option><option value="admin">Admin</option></select></label>
     <button type="submit" class="primary" data-create-user-button>Invite</button>
   </form>`;

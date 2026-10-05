@@ -30,6 +30,10 @@ export function connect(onDataChanged) {
   return db.auth;
 }
 
+export async function completePasswordReset(password) {
+  return invokeEdgeFunction("set-password", { password });
+}
+
 export async function loadUserRole(userId) {
   const { data, error } = await db.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
   if (error) throw error;

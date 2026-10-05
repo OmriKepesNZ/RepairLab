@@ -61,13 +61,16 @@ Deno.serve(async (req) => {
     const password = typeof body.password === "string" ? body.password : "";
     const role = body.role === "admin" ? "admin" : body.role === "staff" ? "staff" : "";
     if (!name || !email || !password || !role) return json({ error: "Name, email, password, and role are required." }, 400);
-    if (password.length < 8) return json({ error: "Use a password with at least 8 characters." }, 400);
+    if (password.length < 8 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+      return json({ error: "Use at least 8 characters, including uppercase, lowercase, a number, and a symbol." }, 400);
+    }
 
     const { data: created, error: createError } = await service.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
       user_metadata: { name },
+      app_metadata: { must_change_password: true },
     });
     if (createError || !created.user) return json({ error: createError?.message ?? "Could not create the account." }, 400);
 
