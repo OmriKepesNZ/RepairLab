@@ -91,14 +91,18 @@ async function syncOrders(sb: any, auth: string, repairCodes: string[]) {
       for (const [i, l] of (o.lineItems ?? []).entries()) {
         const code: string = l.code ?? "";
         if (!isRepair(code, repairCodes)) continue;
+        const rawPrice = l.price == null || l.price === "" ? null : Number(l.price);
+        const price = rawPrice !== null && Number.isFinite(rawPrice) ? rawPrice : null;
         if (!customer && noName.length < 3) noName.push({ ref: o.reference, memberId: o.memberId, firstName: o.firstName, lastName: o.lastName, company: o.company, deliveryFirstName: o.deliveryFirstName, billingFirstName: o.billingFirstName });
         const key = `${o.id}-${l.id ?? i}`;
 
-        const { data: ex } = await sb.from("repairs").select("id, item, customer_name, cin7_comments").eq("cin7_key", key).maybeSingle();
+        const { data: ex } = await sb.from("repairs").select("id, item, customer_name, cin7_comments, cin7_price").eq("cin7_key", key).maybeSingle();
         if (ex) { // already imported: refresh Cin7-owned info only, never touch lab data
           const patch: Record<string, unknown> = {};
           if (ex.item !== code) patch.item = code;
           if ((ex.cin7_comments ?? null) !== comments) patch.cin7_comments = comments;
+          const existingPrice = ex.cin7_price == null ? null : Number(ex.cin7_price);
+          if (existingPrice !== price) patch.cin7_price = price;
           if (!ex.customer_name && customer) patch.customer_name = customer;
           if (Object.keys(patch).length) {
             await sb.from("repairs").update(patch).eq("id", ex.id);
@@ -115,6 +119,7 @@ async function syncOrders(sb: any, auth: string, repairCodes: string[]) {
           order_created: o.createdDate ? nzDate(o.createdDate) : null,
           item: code,
           qty: l.qty ?? 1,
+          cin7_price: price,
           status: "Created in Cin7",
           payment_status: code === "CA11002" ? "Waived" : "Unpaid",
           cin7_comments: comments,

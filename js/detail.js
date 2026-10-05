@@ -10,6 +10,8 @@ const options = (list, selected, withBlank) =>
 const numberOrBlank = (text) => (text === "" ? "" : Number(text));
 const statusLabel = (value) => ({ "Created in Cin7": "To do", "In Lab": "In lab", "In Progress": "In progress", "Ready for Pickup": "Ready for pickup", Completed: "Archived" })[value] || value;
 const orderClassLabel = (value) => value === "CA11002" ? "Warranty repair" : /^CA11001(?:\.|$)/.test(value) ? "Non-warranty repair" : value || "—";
+const currency = new Intl.NumberFormat("en-NZ", { style: "currency", currency: "NZD", currencyDisplay: "narrowSymbol" });
+const priceLabel = (value) => value === "" || value == null ? "—" : currency.format(Number(value));
 const statusButtons = (current) => [...STATUSES.slice(0, 4), ...(current === "Completed" ? ["Completed"] : [])].map((value) => `<button type="button" class="status-option${current === value ? " active" : ""}" data-status="${esc(value)}">${esc(statusLabel(value))}</button>`).join("");
 const labNotes = (repair) => {
   const comments = (repair.events || []).filter((event) => event.type === "comment").sort((a, b) => b.at.localeCompare(a.at));
@@ -72,7 +74,10 @@ const drawerInfoBlock = (r, isNew, fromCin7) => `
         <div class="drawer-readonly"><label>Ordered</label><div>${esc(fmtDate(r.orderCreated))}</div></div>
         <div class="drawer-readonly"><label>Qty</label><div>${esc(r.qty || "—")}</div></div>
       </div>
-      <div class="drawer-readonly drawer-wide"><label>Class</label><div>${esc(orderClassLabel(r.item))}</div></div>
+      <div class="drawer-order-grid">
+        <div class="drawer-readonly"><label>Class</label><div>${esc(orderClassLabel(r.item))}</div></div>
+        <div class="drawer-readonly"><label>Price</label><div>${esc(priceLabel(r.cin7Price))}</div></div>
+      </div>
       <div class="drawer-readonly drawer-wide"><label>Payment</label><div>${esc(r.paymentStatus || "Unpaid")}</div></div>
       ${r.cin7Comments ? `<div class="drawer-readonly drawer-wide"><label>Comment from Cin7</label><div>${esc(r.cin7Comments)}</div></div>` : ""}
     ` : `
