@@ -17,7 +17,7 @@ const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout
 
 type Repair = { id: string; cin7_key: string | null; payment_status: string | null; cin7_price: number | null };
 type RepairLink = { repair: Repair; lineRef: number };
-type SalesOrder = { id: number; total: number; isVoid: boolean; lineItems?: { id: number; code: string; price?: number | string | null }[] };
+type SalesOrder = { id: number; total: number; isVoid: boolean; lineItems?: { id: number; code: string; unitPrice?: number | string | null }[] };
 type Payment = { id?: number; orderId: number; amount: number; direction?: number; orderType?: number | string | null };
 
 Deno.serve(async (req) => {
@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
       for (let page = 1; ; page++) {
         const result = await cin7Get<SalesOrder[]>("SalesOrders", {
           where,
-          fields: "id,total,isVoid,lineItems(id,code,price)",
+          fields: "id,total,isVoid,lineItems(id,code,unitPrice)",
           page: String(page),
           rows: String(PAGE_SIZE),
         });
@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
       for (const { repair, lineRef } of linkedRepairs) {
         const line = order.lineItems?.find((item) => Number(item.id) === lineRef) ?? order.lineItems?.[lineRef];
         if (line) {
-          const rawPrice = line.price == null || line.price === "" ? null : Number(line.price);
+          const rawPrice = line.unitPrice == null || line.unitPrice === "" ? null : Number(line.unitPrice);
           const price = rawPrice !== null && Number.isFinite(rawPrice) ? rawPrice : null;
           const existingPrice = repair.cin7_price == null ? null : Number(repair.cin7_price);
           if (existingPrice !== price) {

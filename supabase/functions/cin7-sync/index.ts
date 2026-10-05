@@ -91,7 +91,7 @@ async function syncOrders(sb: any, auth: string, repairCodes: string[]) {
       for (const [i, l] of (o.lineItems ?? []).entries()) {
         const code: string = l.code ?? "";
         if (!isRepair(code, repairCodes)) continue;
-        const rawPrice = l.price == null || l.price === "" ? null : Number(l.price);
+        const rawPrice = l.unitPrice == null || l.unitPrice === "" ? null : Number(l.unitPrice);
         const price = rawPrice !== null && Number.isFinite(rawPrice) ? rawPrice : null;
         if (!customer && noName.length < 3) noName.push({ ref: o.reference, memberId: o.memberId, firstName: o.firstName, lastName: o.lastName, company: o.company, deliveryFirstName: o.deliveryFirstName, billingFirstName: o.billingFirstName });
         const key = `${o.id}-${l.id ?? i}`;
