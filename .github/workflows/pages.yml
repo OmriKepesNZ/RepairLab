@@ -30,6 +30,7 @@ jobs:
           mkdir -p _site
           cp index.html config.js favicon.png logo.png _site/
           cp -R css js _site/
+          printf '%s\n' 'repairlab.cactusoutdoor.co.nz' > _site/CNAME
       - name: Upload site files
         uses: actions/upload-pages-artifact@v3
         with:
