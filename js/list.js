@@ -87,7 +87,15 @@ function repairCard(repair) {
 function boardHtml() {
   const repairs = matchingRepairs();
   const columns = STATUSES.filter((status) => status !== "Completed").map((status) => {
-    const statusRepairs = repairs.filter((r) => r.status === status).sort((a, b) => Number(Boolean(b.isUrgent)) - Number(Boolean(a.isUrgent)) || waitingDays(b) - waitingDays(a));
+    const statusRepairs = repairs.filter((r) => r.status === status).sort((a, b) => {
+      const urgentDifference = Number(Boolean(b.isUrgent)) - Number(Boolean(a.isUrgent));
+      if (urgentDifference) return urgentDifference;
+      if (!a.isUrgent && !b.isUrgent) {
+        const orderDifference = (a.sortOrder ?? Infinity) - (b.sortOrder ?? Infinity);
+        if (orderDifference) return orderDifference;
+      }
+      return waitingDays(b) - waitingDays(a);
+    });
     return `<div class="col" data-status="${status}"><div class="col-head"><span>${displayStatus(status)}</span><span>${statusRepairs.length}</span></div><div class="col-body">${statusRepairs.map(repairCard).join("") || '<div class="empty">Nothing here</div>'}</div></div>`;
   });
   return `<div class="board">${columns.join("")}</div>`;
@@ -121,7 +129,29 @@ export function setListFilter(filter) {
 export function initRepairViews() {
   const content = $("content");
   const repairFor = (el) => state.repairs.find((r) => r.id === el.dataset.id);
+  let draggedCard = null;
+  let placeholder = null;
+  let dropPending = false;
   const clearHighlights = () => content.querySelectorAll(".dragover, .dragging").forEach((el) => el.classList.remove("dragover", "dragging"));
+  const finishDrag = () => {
+    placeholder?.remove();
+    placeholder = null;
+    draggedCard = null;
+    clearHighlights();
+  };
+
+  const placePlaceholder = (body, before) => {
+    const cards = [...body.querySelectorAll(":scope > .card:not(.dragging)")];
+    const previousPositions = new Map(cards.map((card) => [card, card.getBoundingClientRect().top]));
+    body.querySelector(".empty")?.remove();
+    body.insertBefore(placeholder, before || null);
+    for (const card of cards) {
+      const delta = previousPositions.get(card) - card.getBoundingClientRect().top;
+      if (delta && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        card.animate([{ transform: `translateY(${delta}px)` }, { transform: "translateY(-3px)" }, { transform: "translateY(0)" }], { duration: 250, easing: "cubic-bezier(.2, .8, .2, 1)" });
+      }
+    }
+  };
 
   content.onclick = (e) => {
     const archiveButton = e.target.closest("[data-view-archived]");
@@ -142,24 +172,56 @@ export function initRepairViews() {
     const repair = e.target.closest(".card, .repair-row");
     if (!repair) return;
     e.dataTransfer.setData("text/plain", repair.dataset.id);
+    if (!repair.classList.contains("card")) return;
+    draggedCard = repair;
+    placeholder = document.createElement("div");
+    placeholder.className = "drop-placeholder";
+    placeholder.style.height = `${repair.getBoundingClientRect().height}px`;
+    repair.after(placeholder);
     repair.classList.add("dragging");
   };
-  content.ondragend = clearHighlights;
+  content.ondragend = () => { if (!dropPending) finishDrag(); };
   content.ondragover = (e) => {
-    const target = e.target.closest("[data-status]");
-    if (!target) return;
+    const column = e.target.closest(".col");
+    const archive = e.target.closest(".archive-dropzone[data-status]");
+    if (!column && !archive) return;
     e.preventDefault();
     content.querySelectorAll(".dragover").forEach((el) => el.classList.remove("dragover"));
-    target.classList.add("dragover");
+    (column || archive).classList.add("dragover");
+    if (!draggedCard || !column) return;
+
+    const body = column.querySelector(".col-body");
+    const overCard = e.target.closest(".card:not(.dragging)");
+    const hoveringDraggedCard = e.target.closest(".card.dragging");
+    const targetCards = [...body.querySelectorAll(":scope > .card:not(.dragging)")];
+    let before = null;
+    if (overCard && overCard.parentElement === body && !overCard.classList.contains("is-urgent")) {
+      const bounds = overCard.getBoundingClientRect();
+      before = e.clientY > bounds.top + bounds.height / 2 ? overCard.nextElementSibling : overCard;
+      while (before && !before.classList.contains("drop-placeholder") && before.classList.contains("is-urgent")) before = before.nextElementSibling;
+    } else if (overCard?.parentElement === body) {
+      before = targetCards.find((card) => !card.classList.contains("is-urgent")) || null;
+    } else if (hoveringDraggedCard && draggedCard.parentElement === body) {
+      return;
+    } else {
+      before = targetCards.find((card) => e.clientY < card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2) || null;
+      while (before?.classList.contains("is-urgent")) before = before.nextElementSibling;
+    }
+    if (placeholder.parentElement !== body || placeholder !== before && placeholder.nextElementSibling !== before) placePlaceholder(body, before);
   };
   content.ondrop = async (e) => {
     const target = e.target.closest("[data-status]");
     if (!target) return;
     e.preventDefault();
-    clearHighlights();
     const repair = state.repairs.find((r) => r.id === e.dataTransfer.getData("text/plain"));
-    if (!repair || repair.status === target.dataset.status) return;
-    try { await moveStatus(repair, target.dataset.status); }
+    if (!repair) { finishDrag(); return; }
+    const body = target.querySelector(".col-body");
+    const orderedIds = body && !repair.isUrgent
+      ? [...body.children].flatMap((child) => child === placeholder ? [repair.id] : child.matches(".card") && child !== draggedCard && !child.classList.contains("is-urgent") ? [child.dataset.id] : [])
+      : null;
+    dropPending = true;
+    try { await moveStatus(repair, target.dataset.status, orderedIds); }
     catch (err) { showBanner("Could not move repair: " + err.message); }
+    finally { dropPending = false; finishDrag(); }
   };
 }

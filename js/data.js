@@ -12,7 +12,7 @@ const COLUMNS = {
   dateReceivedLab: "date_received_lab", dateOut: "date_out", item: "item", qty: "qty", category: "category",
   description: "description", status: "status", paymentStatus: "payment_status", repairTime: "repair_time",
   materialCost: "material_cost", productCode: "product_code", productName: "product_name",
-  cin7Comments: "cin7_comments", cin7Key: "cin7_key", cin7Price: "cin7_price", isUrgent: "is_urgent",
+  cin7Comments: "cin7_comments", cin7Key: "cin7_key", cin7Price: "cin7_price", isUrgent: "is_urgent", sortOrder: "sort_order",
 };
 
 const toRow = (fields) =>
@@ -93,15 +93,36 @@ export async function deleteRepair(id) {
 // Moving it into "Ready for Pickup" fills in today's date as "date completed" (if not already set).
 export function withLabDate(repair, changes) {
   const newStatus = changes.status ?? repair.status;
-  if (newStatus === STATUSES[1] && !repair.dateReceivedLab && !changes.dateReceivedLab) changes.dateReceivedLab = today();
-  if (newStatus === STATUSES[3] && !repair.dateOut && !changes.dateOut) changes.dateOut = today();
+  const statusIndex = STATUSES.indexOf(newStatus);
+  if (statusIndex >= STATUSES.indexOf("In Lab") && !repair.dateReceivedLab && !changes.dateReceivedLab) changes.dateReceivedLab = today();
+  if (statusIndex >= STATUSES.indexOf("Ready for Pickup") && !repair.dateOut && !changes.dateOut) changes.dateOut = today();
   return changes;
 }
 
-export async function moveStatus(repair, status) {
-  const changes = withLabDate(repair, { status });
-  const note = `Status: ${repair.status} → ${status}` + (changes.dateReceivedLab ? ` (received in lab ${changes.dateReceivedLab})` : "");
-  await saveRepair(repair.id, changes, [newEvent("event", note)]);
+export async function moveStatus(repair, status, orderedIds = null) {
+  const statusChanged = repair.status !== status;
+  const changes = statusChanged ? withLabDate(repair, { status }) : {};
+  const orderUpdates = (orderedIds || []).map((id, index) => {
+    if (id === repair.id) {
+      changes.sortOrder = index;
+      return null;
+    }
+    return db.from("repairs").update({ sort_order: index }).eq("id", id);
+  }).filter(Boolean);
+
+  if (Object.keys(changes).length) {
+    const { error } = await db.from("repairs").update(toRow(changes)).eq("id", repair.id);
+    if (error) throw error;
+  }
+  const orderResults = await Promise.all(orderUpdates);
+  const orderError = orderResults.find((result) => result.error)?.error;
+  if (orderError) throw orderError;
+
+  if (statusChanged) {
+    const note = `Status: ${repair.status} → ${status}` + (changes.dateReceivedLab ? ` (received in lab ${changes.dateReceivedLab})` : "");
+    await insertEvents(repair.id, [newEvent("event", note)]);
+  }
+  await loadRepairs();
 }
 
 // Search the Cin7 product list (copied into the "products" table by the sync function).
